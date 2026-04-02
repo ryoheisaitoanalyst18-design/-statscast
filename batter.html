@@ -64,7 +64,6 @@
   <!-- コース別ヒートマップ -->
   <div class="chart-section">
 
-    <!-- 統計種別タブ -->
     <div style="margin-bottom:12px">
       <div class="tab-group" role="tablist">
         <button class="tab-btn active" data-stat="ba"    role="tab">コース別打率</button>
@@ -73,12 +72,10 @@
       </div>
     </div>
 
-    <!-- 球種タブ -->
     <div style="margin-bottom:14px">
       <div style="font-size:11px;color:#888;margin-bottom:5px">球種フィルター</div>
       <div class="tab-group" id="pitch-type-tabs" role="tablist">
         <button class="tab-btn active" data-type="all" role="tab">全球種</button>
-        <!-- 動的追加 -->
       </div>
     </div>
 
@@ -86,45 +83,36 @@
 
     <div class="chart-row">
       <div class="zone-chart-wrap">
-        <canvas id="zone-canvas" width="360" height="360"
+        <canvas id="zone-canvas" width="360" height="400"
           aria-label="コース別ヒートマップ"></canvas>
       </div>
 
       <!-- 投球散布図 -->
       <div style="flex:1 1 300px">
-        <h3 style="margin-bottom:10px">投球分布</h3>
+        <h3 style="margin-bottom:8px">インパクトコース分布</h3>
 
         <div class="pitch-toggles">
           <label class="toggle-label">
-            <input type="checkbox" id="toggle-called" checked>
-            見逃し
+            <input type="checkbox" id="toggle-hit" checked>
+            <span class="toggle-dot hit"></span>安打
           </label>
           <label class="toggle-label">
             <input type="checkbox" id="toggle-swinging" checked>
-            空振り
+            <span class="toggle-dot swinging"></span>空振り
           </label>
           <label class="toggle-label">
-            <input type="checkbox" id="toggle-hit" checked>
-            安打
+            <input type="checkbox" id="toggle-weak" checked>
+            <span class="toggle-dot weak"></span>凡打
           </label>
         </div>
 
         <div class="pitch-plot-wrap">
-          <canvas id="pitch-canvas" width="340" height="430"
+          <canvas id="pitch-canvas" width="340" height="460"
             aria-label="投球散布図"></canvas>
         </div>
 
-        <div class="legend-row">
-          <span class="legend-item called">
-            <span class="legend-dot"></span>見逃し
-          </span>
-          <span class="legend-item swinging">
-            <span class="legend-dot"></span>空振り
-          </span>
-          <span class="legend-item hit">
-            <span class="legend-dot"></span>安打
-          </span>
-        </div>
+        <!-- 球種凡例 -->
+        <div class="shape-legend" id="shape-legend"></div>
       </div>
     </div>
 

@@ -1,30 +1,59 @@
 'use strict';
 
 const PitchPlot = (() => {
-  // 表示範囲（フィート）
   const X_MIN = -1.6, X_MAX = 1.6;
   const Z_MIN = 0.5,  Z_MAX = 4.8;
 
-  // ストライクゾーン
   const SZ_X_MIN = -0.7083, SZ_X_MAX = 0.7083;
   const SZ_Z_MIN = 1.5,     SZ_Z_MAX = 3.5;
+  const BB_INNER = 1.208; // バッターボックス内端（フィート）
 
-  // ゾーン列/行境界
   const COL_X = [-0.2361, 0.2361];
   const ROW_Z = [2.167, 2.833];
 
   const HITS = new Set(['Single', 'Double', 'Triple', 'HomeRun']);
 
-  const COLORS = {
-    called:   { fill: '#F5A623', stroke: '#B87800' },  // 見逃し：オレンジ
-    swinging: { fill: '#E83030', stroke: '#A00000' },  // 空振り：赤
-    hit:      { fill: '#27AE60', stroke: '#1A7A40' },  // 安打：緑
+  // 結果別の色
+  const OUTCOME_COLORS = {
+    hit:         { fill: '#27AE60', stroke: '#1A7A40' },   // 安打：緑
+    swinging:    { fill: '#E83030', stroke: '#A00000' },   // 空振り：赤
+    weakContact: { fill: '#8899AA', stroke: '#556677' },   // 凡打：グレー
   };
 
+  // 球種別のシェイプ
+  const PITCH_SHAPES = {
+    Fastball:    'circle',
+    Sinker:      'circle',
+    Cutter:      'diamond',
+    Slider:      'triangle',
+    Curveball:   'square',
+    Changeup:    'invertedTriangle',
+    Splitter:    'cross',
+    Knuckleball: 'circle',
+    Other:       'circle',
+  };
+
+  const PITCH_TYPE_LABELS = {
+    Fastball:    'ストレート',
+    Sinker:      'ツーシーム',
+    Cutter:      'カット',
+    Slider:      'スライダー',
+    Curveball:   'カーブ',
+    Changeup:    'チェンジアップ',
+    Splitter:    'フォーク',
+    Knuckleball: 'ナックル',
+    Other:       'その他',
+  };
+
+  function getShape(pitchType) {
+    return PITCH_SHAPES[pitchType] || 'circle';
+  }
+
   function getOutcomeType(pitch) {
-    if (pitch.PitchCall === 'StrikeCalled')   return 'called';
     if (pitch.PitchCall === 'StrikeSwinging') return 'swinging';
-    if (pitch.PitchCall === 'InPlay' && HITS.has(pitch.PlayResult)) return 'hit';
+    if (pitch.PitchCall === 'InPlay') {
+      return HITS.has(pitch.PlayResult) ? 'hit' : 'weakContact';
+    }
     return null;
   }
 
@@ -36,33 +65,148 @@ const PitchPlot = (() => {
     return { cx, cy };
   }
 
+  function drawShape(ctx, cx, cy, r, shape, fill, stroke) {
+    ctx.fillStyle = fill;
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = 0.9;
+
+    switch (shape) {
+      case 'circle':
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        break;
+      case 'triangle':
+        ctx.beginPath();
+        ctx.moveTo(cx,           cy - r * 1.1);
+        ctx.lineTo(cx + r * 0.95, cy + r * 0.65);
+        ctx.lineTo(cx - r * 0.95, cy + r * 0.65);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        break;
+      case 'square': {
+        const s = r * 0.92;
+        ctx.beginPath();
+        ctx.rect(cx - s, cy - s, s * 2, s * 2);
+        ctx.fill();
+        ctx.stroke();
+        break;
+      }
+      case 'diamond':
+        ctx.beginPath();
+        ctx.moveTo(cx,           cy - r * 1.25);
+        ctx.lineTo(cx + r * 0.85, cy);
+        ctx.lineTo(cx,           cy + r * 1.25);
+        ctx.lineTo(cx - r * 0.85, cy);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        break;
+      case 'invertedTriangle':
+        ctx.beginPath();
+        ctx.moveTo(cx,           cy + r * 1.1);
+        ctx.lineTo(cx + r * 0.95, cy - r * 0.65);
+        ctx.lineTo(cx - r * 0.95, cy - r * 0.65);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        break;
+      case 'cross': {
+        const r2 = r * 0.82;
+        ctx.lineWidth = 2.4;
+        ctx.strokeStyle = fill;
+        ctx.beginPath();
+        ctx.moveTo(cx - r2, cy - r2);
+        ctx.lineTo(cx + r2, cy + r2);
+        ctx.moveTo(cx + r2, cy - r2);
+        ctx.lineTo(cx - r2, cy + r2);
+        ctx.stroke();
+        ctx.lineWidth = 0.9;
+        break;
+      }
+      default:
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+    }
+  }
+
+  // ホームベース（五角形）描画
+  function drawHomePlate(ctx, cx, plateTop, plateW) {
+    const hw = plateW / 2;
+    const sideH = hw * 0.22;
+    const diagH = hw * 0.26;
+    ctx.beginPath();
+    ctx.moveTo(cx - hw, plateTop);
+    ctx.lineTo(cx + hw, plateTop);
+    ctx.lineTo(cx + hw, plateTop + sideH);
+    ctx.lineTo(cx,      plateTop + sideH + diagH);
+    ctx.lineTo(cx - hw, plateTop + sideH);
+    ctx.closePath();
+    ctx.fillStyle = '#ffffff';
+    ctx.fill();
+    ctx.strokeStyle = '#222';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
+
   function draw(canvas, pitches, options) {
-    const { showCalled = true, showSwinging = true, showHit = true } = options || {};
+    const {
+      showHit = true, showSwinging = true, showWeak = true,
+    } = options || {};
 
     const ctx = canvas.getContext('2d');
     const W = canvas.width;
     const H = canvas.height;
     ctx.clearRect(0, 0, W, H);
 
-    const pad = { t: 18, r: 18, b: 38, l: 44 };
+    const pad = { t: 18, r: 18, b: 68, l: 44 };
 
     // 背景
-    ctx.fillStyle = '#fafafa';
+    ctx.fillStyle = '#f8f9fb';
     ctx.fillRect(0, 0, W, H);
 
-    // ゾーン外エリア（薄いグレー枠外）
     const szTL = toCanvas(SZ_X_MIN, SZ_Z_MAX, W, H, pad);
     const szBR = toCanvas(SZ_X_MAX, SZ_Z_MIN, W, H, pad);
-    const szW = szBR.cx - szTL.cx;
-    const szH = szBR.cy - szTL.cy;
+    const szW  = szBR.cx - szTL.cx;
+    const szH  = szBR.cy - szTL.cy;
 
-    // ストライクゾーン塗りつぶし
-    ctx.fillStyle = 'rgba(210, 230, 255, 0.35)';
+    // ====== バッターボックス ======
+    const bbLeftInner  = toCanvas(-BB_INNER, SZ_Z_MAX, W, H, pad).cx;
+    const bbRightInner = toCanvas( BB_INNER, SZ_Z_MAX, W, H, pad).cx;
+    const bbTop    = pad.t;
+    const bbBottom = szBR.cy + 2;
+    const bbHeight = bbBottom - bbTop;
+
+    ctx.fillStyle = 'rgba(160,190,230,0.08)';
+    ctx.fillRect(pad.l, bbTop, bbLeftInner - pad.l, bbHeight);
+    ctx.fillRect(bbRightInner, bbTop, W - pad.r - bbRightInner, bbHeight);
+
+    ctx.strokeStyle = 'rgba(60,100,180,0.35)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([5, 4]);
+    ctx.strokeRect(pad.l, bbTop, bbLeftInner - pad.l, bbHeight);
+    ctx.strokeRect(bbRightInner, bbTop, W - pad.r - bbRightInner, bbHeight);
+    ctx.setLineDash([]);
+
+    // L/R ラベル
+    ctx.fillStyle = 'rgba(50,90,170,0.4)';
+    ctx.font = 'bold 8px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillText('L', pad.l + (bbLeftInner - pad.l) / 2, bbTop + 4);
+    ctx.fillText('R', bbRightInner + (W - pad.r - bbRightInner) / 2, bbTop + 4);
+
+    // ====== ストライクゾーン背景 ======
+    ctx.fillStyle = 'rgba(205, 225, 255, 0.4)';
     ctx.fillRect(szTL.cx, szTL.cy, szW, szH);
 
-    // ゾーン内グリッド線
-    ctx.strokeStyle = '#aabbcc';
-    ctx.lineWidth = 0.8;
+    // ====== 9分割グリッド ======
+    ctx.strokeStyle = '#7799bb';
+    ctx.lineWidth = 1.3;
     COL_X.forEach(x => {
       const t = toCanvas(x, SZ_Z_MAX, W, H, pad);
       const b = toCanvas(x, SZ_Z_MIN, W, H, pad);
@@ -74,34 +218,44 @@ const PitchPlot = (() => {
       ctx.beginPath(); ctx.moveTo(l.cx, l.cy); ctx.lineTo(r.cx, r.cy); ctx.stroke();
     });
 
-    // ストライクゾーン枠線
-    ctx.strokeStyle = '#2255AA';
-    ctx.lineWidth = 2;
+    // ゾーン番号
+    const cellW = szW / 3;
+    const cellH = szH / 3;
+    ctx.fillStyle = 'rgba(30,50,120,0.22)';
+    ctx.font = '8px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    for (let dRow = 0; dRow < 3; dRow++) {       // dRow 0=high,1=mid,2=low
+      for (let col = 0; col < 3; col++) {
+        const dataRow = 2 - dRow;                 // dataRow 2=high,0=low
+        const zoneNum = dataRow * 3 + col + 1;    // 1-9
+        ctx.fillText(zoneNum,
+          szTL.cx + col * cellW + 2,
+          szTL.cy + dRow * cellH + 2);
+      }
+    }
+
+    // ====== ストライクゾーン外枠 ======
+    ctx.strokeStyle = '#1a3a8c';
+    ctx.lineWidth = 2.2;
     ctx.strokeRect(szTL.cx, szTL.cy, szW, szH);
 
-    // 中心線（縦破線）
-    const cTop = toCanvas(0, Z_MAX, W, H, pad);
-    const cBot = toCanvas(0, Z_MIN, W, H, pad);
+    // ====== 中心線（縦破線） ======
     ctx.strokeStyle = '#cccccc';
     ctx.lineWidth = 0.7;
     ctx.setLineDash([4, 4]);
     ctx.beginPath();
-    ctx.moveTo(cTop.cx, pad.t);
-    ctx.lineTo(cBot.cx, H - pad.b);
+    ctx.moveTo((szTL.cx + szBR.cx) / 2, pad.t);
+    ctx.lineTo((szTL.cx + szBR.cx) / 2, szBR.cy);
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // ホームプレート（模式）
-    const plateY = H - pad.b + 4;
-    const plateCenter = toCanvas(0, Z_MIN, W, H, pad).cx;
-    const plateHalfW = szW / 2;
-    ctx.fillStyle = '#999';
-    ctx.font = 'bold 9px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'top';
-    ctx.fillText('▲', plateCenter, plateY);
+    // ====== ホームベース（五角形） ======
+    const plateCX = (szTL.cx + szBR.cx) / 2;
+    const plateTop = H - pad.b + 10;
+    drawHomePlate(ctx, plateCX, plateTop, szW);
 
-    // Y軸ラベル（高さ ft）
+    // ====== Y軸ラベル ======
     ctx.fillStyle = '#666';
     ctx.font = '10px sans-serif';
     ctx.textAlign = 'right';
@@ -111,40 +265,42 @@ const PitchPlot = (() => {
       ctx.fillText(z + 'ft', pad.l - 4, cy);
     });
 
-    // X軸ラベル
+    // ====== X軸ラベル ======
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
     [-1, 0, 1].forEach(x => {
       const { cx } = toCanvas(x, Z_MIN, W, H, pad);
-      ctx.fillText(x === 0 ? '0' : (x > 0 ? '+' + x : x), cx, H - pad.b + 6);
+      ctx.fillText(x === 0 ? '0' : (x > 0 ? '+' + x : String(x)), cx, H - pad.b + 6);
     });
 
-    // 軸タイトル
+    // ====== 軸タイトル ======
     ctx.fillStyle = '#888';
     ctx.font = '9px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('← 三塁側　　一塁側 →', W / 2, H - pad.b + 18);
+    ctx.fillText('← 三塁側　　一塁側 →', W / 2, H - pad.b + 22);
 
-    // 投球プロット
-    // 描画順：called → swinging → hit (hitを前面に)
-    const drawOrder = ['called', 'swinging', 'hit'];
-    const visMap = { called: showCalled, swinging: showSwinging, hit: showHit };
+    // ====== 投球プロット（凡打→空振り→安打の順で描画） ======
+    const drawOrder = ['weakContact', 'swinging', 'hit'];
+    const visMap = { weakContact: showWeak, swinging: showSwinging, hit: showHit };
 
-    drawOrder.forEach(type => {
-      if (!visMap[type]) return;
+    drawOrder.forEach(outcomeType => {
+      if (!visMap[outcomeType]) return;
       pitches.forEach(pitch => {
-        if (getOutcomeType(pitch) !== type) return;
+        if (getOutcomeType(pitch) !== outcomeType) return;
         const { cx, cy } = toCanvas(pitch.PlateLocSide, pitch.PlateLocHeight, W, H, pad);
-        ctx.beginPath();
-        ctx.arc(cx, cy, 5.5, 0, Math.PI * 2);
-        ctx.fillStyle = COLORS[type].fill;
-        ctx.fill();
-        ctx.strokeStyle = COLORS[type].stroke;
-        ctx.lineWidth = 0.8;
-        ctx.stroke();
+        const shape = getShape(pitch.TaggedPitchType);
+        const { fill, stroke } = OUTCOME_COLORS[outcomeType];
+        drawShape(ctx, cx, cy, 5.5, shape, fill, stroke);
       });
     });
   }
 
-  return { draw, COLORS };
+  // 凡例アイコン描画用
+  function drawLegendShape(canvas, shape, fill, stroke) {
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    drawShape(ctx, canvas.width / 2, canvas.height / 2, 6, shape, fill, stroke);
+  }
+
+  return { draw, drawLegendShape, OUTCOME_COLORS, PITCH_SHAPES, PITCH_TYPE_LABELS };
 })();

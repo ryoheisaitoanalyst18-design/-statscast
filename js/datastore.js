@@ -178,6 +178,53 @@ const STATSCAST = (() => {
     );
   }
 
+  function getPitcherList(pitches) {
+    const pitchers = {};
+    pitches.forEach(pitch => {
+      const name = (pitch.Pitcher || '').trim();
+      if (!name) return;
+      if (!pitchers[name]) {
+        pitchers[name] = {
+          name,
+          team: pitch.PitcherTeam || '',
+          throws: pitch.PitcherThrows || '',
+          ab: 0, hits: 0, k: 0, bb: 0,
+        };
+      }
+      const p = pitchers[name];
+      if (isAtBatEnding(pitch)) p.ab++;
+      if (isHit(pitch)) p.hits++;
+      if (pitch.KorBB === 'Strikeout') p.k++;
+      if (pitch.KorBB === 'Walk') p.bb++;
+    });
+    return Object.values(pitchers).sort((a, b) => a.name.localeCompare(b.name, 'ja'));
+  }
+
+  function getPitcherPitches(pitches, pitcherName, pitchType, batterSide) {
+    return pitches.filter(p => {
+      if (pitcherName && p.Pitcher !== pitcherName) return false;
+      if (pitchType && pitchType !== 'all' && p.TaggedPitchType !== pitchType) return false;
+      if (batterSide && batterSide !== 'all' && p.BatterSide !== batterSide) return false;
+      return true;
+    });
+  }
+
+  function getYears(pitches) {
+    const years = new Set();
+    pitches.forEach(p => {
+      const d = String(p.Date || p.GameDate || '').trim();
+      if (!d) return;
+      const m = d.match(/(\d{4})/);
+      if (m && +m[1] >= 2000) years.add(m[1]);
+    });
+    return Array.from(years).sort().reverse();
+  }
+
+  function getPitcherTeams(pitches) {
+    const teams = new Set(pitches.map(p => p.PitcherTeam).filter(Boolean));
+    return Array.from(teams).sort();
+  }
+
   async function tryLoadFromFile() {
     try {
       const response = await fetch('data/data.csv');
@@ -191,8 +238,9 @@ const STATSCAST = (() => {
 
   return {
     parseCSV, parseExcel, loadStoredData, saveData, mergeData, clearData,
-    getBatterList, getTeams, getPitchTypes, filterPitches,
-    getZoneStats, getBatterPitches, tryLoadFromFile,
+    getBatterList, getPitcherList, getTeams, getPitcherTeams, getPitchTypes,
+    filterPitches, getPitcherPitches, getZoneStats, getBatterPitches,
+    getYears, tryLoadFromFile,
     ZONE_X, ZONE_Z,
   };
 })();

@@ -2,12 +2,11 @@
 
 const ZoneChart = (() => {
   const STAT_LABELS = {
-    ba: 'コース別打率',
+    ba:    'コース別打率',
     whiff: '空振り率',
-    gb: 'ゴロ率',
+    gb:    'ゴロ率',
   };
 
-  // 絶対スケール（意味のある色分けのため）
   const COLOR_SCALES = {
     ba:    { min: 0.150, max: 0.400 },
     whiff: { min: 0.030, max: 0.400 },
@@ -25,20 +24,15 @@ const ZoneChart = (() => {
 
   function formatStat(value, statType) {
     if (value === null || isNaN(value)) return '—';
-    if (statType === 'ba') {
-      // ".234" 形式
-      return value.toFixed(3).replace(/^0/, '');
-    }
+    if (statType === 'ba') return value.toFixed(3).replace(/^0/, '');
     return (value * 100).toFixed(1) + '%';
   }
 
-  // 青(低)→白(中)→赤(高) のグラデーション
   function getColor(value, statType) {
-    if (value === null || isNaN(value)) return '#d0d0d0';
+    if (value === null || isNaN(value)) return '#d8d8d8';
     const scale = COLOR_SCALES[statType];
     let t = (value - scale.min) / (scale.max - scale.min);
     t = Math.max(0, Math.min(1, t));
-
     let r, g, b;
     if (t < 0.5) {
       const s = t / 0.5;
@@ -54,60 +48,114 @@ const ZoneChart = (() => {
     return `rgb(${r},${g},${b})`;
   }
 
+  function drawHomePlate(ctx, cx, plateTop, plateW) {
+    const hw = plateW / 2;
+    const sideH = Math.max(10, hw * 0.18);
+    const diagH = Math.max(12, hw * 0.22);
+    ctx.beginPath();
+    ctx.moveTo(cx - hw, plateTop);
+    ctx.lineTo(cx + hw, plateTop);
+    ctx.lineTo(cx + hw, plateTop + sideH);
+    ctx.lineTo(cx,      plateTop + sideH + diagH);
+    ctx.lineTo(cx - hw, plateTop + sideH);
+    ctx.closePath();
+    ctx.fillStyle = '#ffffff';
+    ctx.fill();
+    ctx.strokeStyle = '#444';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
+
   function draw(canvas, zoneStats, statType) {
     const ctx = canvas.getContext('2d');
     const W = canvas.width;
     const H = canvas.height;
     ctx.clearRect(0, 0, W, H);
 
-    // キャンバス背景
-    ctx.fillStyle = '#f5f5f5';
+    ctx.fillStyle = '#f5f6fa';
     ctx.fillRect(0, 0, W, H);
 
-    const pad = { top: 20, right: 20, bottom: 45, left: 52 };
+    // Padding: extra bottom for home plate + color bar
+    const pad = { top: 22, right: 18, bottom: 82, left: 52 };
     const zoneAreaW = W - pad.left - pad.right;
     const zoneAreaH = H - pad.top - pad.bottom;
     const cellW = zoneAreaW / 3;
     const cellH = zoneAreaH / 3;
 
-    // --- セル描画 ---
-    // zoneStats[idx]: idx = row*3 + col, row0=低め, row2=高め
-    // キャンバスは上が小さいy → 高めを上に表示するためrowを反転
+    // ====== Batter's box indicators (left & right of zone) ======
+    const bbW = 12; // pixel width of indicator strip
+    const bbGap = 4; // gap between zone and indicator
+    const bbTop = pad.top;
+    const bbH = zoneAreaH;
+
+    // Left batter's box (third base side)
+    const lbx = pad.left - bbGap - bbW;
+    ctx.fillStyle = 'rgba(80,130,200,0.07)';
+    ctx.fillRect(lbx, bbTop, bbW, bbH);
+    ctx.strokeStyle = 'rgba(80,130,200,0.35)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 3]);
+    ctx.strokeRect(lbx, bbTop, bbW, bbH);
+    ctx.setLineDash([]);
+
+    // Right batter's box (first base side)
+    const rbx = pad.left + zoneAreaW + bbGap;
+    ctx.fillStyle = 'rgba(80,130,200,0.07)';
+    ctx.fillRect(rbx, bbTop, bbW, bbH);
+    ctx.strokeStyle = 'rgba(80,130,200,0.35)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 3]);
+    ctx.strokeRect(rbx, bbTop, bbW, bbH);
+    ctx.setLineDash([]);
+
+    // ====== Zone cells ======
     for (let row = 0; row < 3; row++) {
       for (let col = 0; col < 3; col++) {
         const zoneIdx = row * 3 + col;
         const { val, n } = getStatValue(zoneStats[zoneIdx], statType);
-
-        // displayRow: 高め(row2)をキャンバス上に表示
         const displayRow = 2 - row;
         const cx = pad.left + col * cellW;
         const cy = pad.top + displayRow * cellH;
 
-        // 背景色
-        ctx.fillStyle = n > 0 ? getColor(val, statType) : '#e0e0e0';
+        // Cell background
+        ctx.fillStyle = n > 0 ? getColor(val, statType) : '#e8e8e8';
         ctx.fillRect(cx, cy, cellW, cellH);
 
-        // 枠線
-        ctx.strokeStyle = '#555';
+        // Cell border
+        ctx.strokeStyle = '#444';
         ctx.lineWidth = 1.5;
         ctx.strokeRect(cx, cy, cellW, cellH);
 
-        // 数値テキスト
+        // Zone number (small, top-left corner)
+        const zoneNum = row * 3 + col + 1;
+        ctx.fillStyle = 'rgba(30,40,80,0.28)';
+        ctx.font = `bold ${Math.round(cellW * 0.13)}px sans-serif`;
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+        ctx.fillText(zoneNum, cx + 4, cy + 3);
+
+        // Stat value
         const statStr = formatStat(val, statType);
+        const fontSize = Math.max(11, Math.round(cellW * 0.155));
         ctx.fillStyle = '#111';
-        ctx.font = 'bold 15px sans-serif';
+        ctx.font = `bold ${fontSize}px sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(statStr, cx + cellW / 2, cy + cellH / 2 - 7);
+        ctx.fillText(statStr, cx + cellW / 2, cy + cellH / 2 - Math.round(cellH * 0.08));
 
-        // サンプルサイズ
-        ctx.font = '11px sans-serif';
-        ctx.fillStyle = '#444';
-        ctx.fillText(`(${n})`, cx + cellW / 2, cy + cellH / 2 + 11);
+        // Sample size
+        ctx.font = `${Math.max(9, Math.round(cellW * 0.11))}px sans-serif`;
+        ctx.fillStyle = '#333';
+        ctx.fillText(`(${n})`, cx + cellW / 2, cy + cellH / 2 + Math.round(cellH * 0.18));
       }
     }
 
-    // --- 行ラベル（高め/真ん中/低め）---
+    // ====== Zone outer border (thicker) ======
+    ctx.strokeStyle = '#1a2a5c';
+    ctx.lineWidth = 2.5;
+    ctx.strokeRect(pad.left, pad.top, zoneAreaW, zoneAreaH);
+
+    // ====== Row labels ======
     const rowLabels = ['高め', '真ん中', '低め'];
     ctx.fillStyle = '#333';
     ctx.font = '12px sans-serif';
@@ -115,50 +163,57 @@ const ZoneChart = (() => {
     ctx.textBaseline = 'middle';
     rowLabels.forEach((label, i) => {
       const y = pad.top + i * cellH + cellH / 2;
-      ctx.fillText(label, pad.left - 5, y);
+      ctx.fillText(label, pad.left - bbGap - bbW - 5, y);
     });
 
-    // --- 列ラベル（左/中/右）キャッチャー視点 ---
+    // ====== Column labels ======
     const colLabels = ['左', '中', '右'];
+    const colLabelY = pad.top + zoneAreaH + 6;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
     ctx.font = '12px sans-serif';
     ctx.fillStyle = '#333';
     colLabels.forEach((label, i) => {
       const x = pad.left + i * cellW + cellW / 2;
-      ctx.fillText(label, x, pad.top + 3 * cellH + 6);
+      ctx.fillText(label, x, colLabelY);
     });
 
-    // --- キャッチャー視点注記 ---
-    ctx.font = '10px sans-serif';
-    ctx.fillStyle = '#888';
+    // ====== Home plate ======
+    const plateCX = pad.left + zoneAreaW / 2;
+    const plateTop = pad.top + zoneAreaH + 24;
+    drawHomePlate(ctx, plateCX, plateTop, zoneAreaW * 0.96);
+
+    // ====== Batter box labels ======
+    ctx.fillStyle = 'rgba(60,100,170,0.55)';
+    ctx.font = 'bold 8px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('L', lbx + bbW / 2, bbTop + bbH / 2);
+    ctx.fillText('R', rbx + bbW / 2, bbTop + bbH / 2);
+
+    // ====== Color scale bar ======
+    const barY = plateTop + 38;
+    drawColorBar(ctx, pad.left, barY, zoneAreaW, 8, statType);
+
+    // ====== Catcher perspective note ======
+    ctx.font = '9px sans-serif';
+    ctx.fillStyle = '#999';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
     ctx.fillText('（キャッチャー視点）', W / 2, H - 2);
-
-    // カラースケールバー
-    drawColorBar(ctx, pad.left, pad.top + 3 * cellH + 22, zoneAreaW, 8, statType);
   }
 
   function drawColorBar(ctx, x, y, w, h, statType) {
     const scale = COLOR_SCALES[statType];
     const grad = ctx.createLinearGradient(x, y, x + w, y);
-
-    // 青→白→赤
     grad.addColorStop(0,   'rgb(80,120,255)');
     grad.addColorStop(0.5, 'rgb(255,255,255)');
     grad.addColorStop(1,   'rgb(255,55,20)');
-
     ctx.fillStyle = grad;
     ctx.fillRect(x, y, w, h);
-    ctx.strokeStyle = '#999';
+    ctx.strokeStyle = '#bbb';
     ctx.lineWidth = 0.5;
     ctx.strokeRect(x, y, w, h);
-
-    // ラベル
-    ctx.fillStyle = '#555';
-    ctx.font = '10px sans-serif';
-    ctx.textBaseline = 'top';
 
     const minLabel = statType === 'ba'
       ? scale.min.toFixed(3).replace(/^0/, '')
@@ -167,6 +222,9 @@ const ZoneChart = (() => {
       ? scale.max.toFixed(3).replace(/^0/, '')
       : (scale.max * 100).toFixed(0) + '%';
 
+    ctx.fillStyle = '#555';
+    ctx.font = '10px sans-serif';
+    ctx.textBaseline = 'top';
     ctx.textAlign = 'left';
     ctx.fillText(minLabel, x, y + h + 2);
     ctx.textAlign = 'right';

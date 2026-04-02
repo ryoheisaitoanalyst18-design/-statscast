@@ -34,31 +34,65 @@
     <div class="data-status" id="data-status"></div>
   </div>
 
-  <!-- 打者一覧 -->
-  <div class="card" id="batter-list-section" style="display:none">
-    <h2>打者一覧</h2>
-    <div class="filters">
-      <input type="text" id="search-input" placeholder="🔍 選手名で検索...">
-      <select id="team-filter">
-        <option value="">全チーム</option>
-      </select>
+  <!-- 打者・投手一覧 -->
+  <div class="card" id="list-section" style="display:none">
+
+    <!-- リスト種別タブ -->
+    <div class="list-type-tabs">
+      <button class="list-tab active" data-list="batter">打者一覧</button>
+      <button class="list-tab" data-list="pitcher">投手一覧</button>
     </div>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>選手名</th>
-            <th>チーム</th>
-            <th class="num">打数</th>
-            <th class="num">安打</th>
-            <th class="num">打率</th>
-            <th class="num">三振</th>
-            <th class="num">四球</th>
-          </tr>
-        </thead>
-        <tbody id="batter-tbody"></tbody>
-      </table>
+
+    <!-- 打者一覧 -->
+    <div id="batter-list-area">
+      <div class="filters">
+        <input type="text" id="search-input" placeholder="🔍 選手名で検索...">
+        <select id="year-filter"><option value="">全年度</option></select>
+        <select id="team-filter"><option value="">全チーム</option></select>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>選手名</th>
+              <th>チーム</th>
+              <th class="num">打数</th>
+              <th class="num">安打</th>
+              <th class="num">打率</th>
+              <th class="num">三振</th>
+              <th class="num">四球</th>
+            </tr>
+          </thead>
+          <tbody id="batter-tbody"></tbody>
+        </table>
+      </div>
     </div>
+
+    <!-- 投手一覧 -->
+    <div id="pitcher-list-area" style="display:none">
+      <div class="filters">
+        <input type="text" id="pitcher-search-input" placeholder="🔍 投手名で検索...">
+        <select id="pitcher-year-filter"><option value="">全年度</option></select>
+        <select id="pitcher-team-filter"><option value="">全チーム</option></select>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>投手名</th>
+              <th>チーム</th>
+              <th class="num">対戦打数</th>
+              <th class="num">被安打</th>
+              <th class="num">被打率</th>
+              <th class="num">奪三振</th>
+              <th class="num">与四球</th>
+            </tr>
+          </thead>
+          <tbody id="pitcher-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
   </div>
 
 </main>

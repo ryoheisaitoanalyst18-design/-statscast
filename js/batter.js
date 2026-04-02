@@ -5,7 +5,6 @@
   const batterName = params.get('name');
   if (!batterName) { location.href = 'index.html'; return; }
 
-  // データ読み込み
   let allPitches = await STATSCAST.tryLoadFromFile();
   if (!allPitches || allPitches.length === 0) {
     allPitches = STATSCAST.loadStoredData();
@@ -23,7 +22,7 @@
     return;
   }
 
-  // --- 打者情報セット ---
+  // --- 打者情報 ---
   document.title = `${batterName} — 東京六大学野球 StatCast`;
   document.getElementById('batter-name').textContent = batterName;
   const first = batterPitches[0];
@@ -53,19 +52,9 @@
   document.getElementById('stat-whiff').textContent = whiffPct;
   document.getElementById('stat-gb').textContent    = gbPct;
 
-  // --- 球種タブ構築 ---
+  // --- 球種タブ ---
   const pitchTypes = STATSCAST.getPitchTypes(batterPitches);
-  const pitchTypeLabels = {
-    Fastball:    'ストレート',
-    Sinker:      'ツーシーム',
-    Cutter:      'カット',
-    Slider:      'スライダー',
-    Curveball:   'カーブ',
-    Changeup:    'チェンジアップ',
-    Splitter:    'フォーク',
-    Knuckleball: 'ナックル',
-    Other:       'その他',
-  };
+  const pitchTypeLabels = PitchPlot.PITCH_TYPE_LABELS;
 
   const typeContainer = document.getElementById('pitch-type-tabs');
   pitchTypes.forEach(type => {
@@ -77,12 +66,15 @@
     typeContainer.appendChild(btn);
   });
 
+  // --- 球種シェイプ凡例 ---
+  buildShapeLegend(pitchTypes);
+
   // --- 状態 ---
   let currentStat      = 'ba';
   let currentPitchType = 'all';
-  let showCalled   = true;
-  let showSwinging = true;
   let showHit      = true;
+  let showSwinging = true;
+  let showWeak     = true;
 
   const zoneCanvas  = document.getElementById('zone-canvas');
   const pitchCanvas = document.getElementById('pitch-canvas');
@@ -94,22 +86,18 @@
       batterName,
       currentPitchType === 'all' ? null : currentPitchType
     );
-
-    // ゾーンチャート
     chartTitle.textContent = ZoneChart.STAT_LABELS[currentStat];
-    const zoneStats = STATSCAST.getZoneStats(pitches);
-    ZoneChart.draw(zoneCanvas, zoneStats, currentStat);
+    ZoneChart.draw(zoneCanvas, STATSCAST.getZoneStats(pitches), currentStat);
 
-    // 投球散布図
     const plotPitches = STATSCAST.getBatterPitches(
       allPitches,
       batterName,
       currentPitchType === 'all' ? null : currentPitchType
     );
-    PitchPlot.draw(pitchCanvas, plotPitches, { showCalled, showSwinging, showHit });
+    PitchPlot.draw(pitchCanvas, plotPitches, { showHit, showSwinging, showWeak });
   }
 
-  // --- 統計種別タブ ---
+  // 統計種別タブ
   document.querySelectorAll('[data-stat]').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('[data-stat]').forEach(b => b.classList.remove('active'));
@@ -119,7 +107,7 @@
     });
   });
 
-  // --- 球種タブ ---
+  // 球種タブ
   typeContainer.addEventListener('click', e => {
     const btn = e.target.closest('[data-type]');
     if (!btn) return;
@@ -129,29 +117,43 @@
     update();
   });
 
-  // --- 投球結果トグル ---
-  document.getElementById('toggle-called').addEventListener('change', e => {
-    showCalled = e.target.checked;
-    updateLegend();
+  // トグル
+  document.getElementById('toggle-hit').addEventListener('change', e => {
+    showHit = e.target.checked;
     update();
   });
   document.getElementById('toggle-swinging').addEventListener('change', e => {
     showSwinging = e.target.checked;
-    updateLegend();
     update();
   });
-  document.getElementById('toggle-hit').addEventListener('change', e => {
-    showHit = e.target.checked;
-    updateLegend();
+  document.getElementById('toggle-weak').addEventListener('change', e => {
+    showWeak = e.target.checked;
     update();
   });
-
-  function updateLegend() {
-    document.querySelector('.legend-item.called').style.opacity   = showCalled   ? 1 : 0.35;
-    document.querySelector('.legend-item.swinging').style.opacity = showSwinging ? 1 : 0.35;
-    document.querySelector('.legend-item.hit').style.opacity      = showHit      ? 1 : 0.35;
-  }
 
   // 初回描画
   update();
+
+  // 球種シェイプ凡例生成
+  function buildShapeLegend(types) {
+    const container = document.getElementById('shape-legend');
+    if (!types.length) return;
+    container.innerHTML = '<div class="shape-legend-title">球種</div>';
+    const NEUTRAL_COLOR = '#555555';
+    types.forEach(type => {
+      const shape = PitchPlot.PITCH_SHAPES[type] || 'circle';
+      const label = pitchTypeLabels[type] || type;
+      const item = document.createElement('span');
+      item.className = 'shape-legend-item';
+      // Small inline canvas for icon
+      const cvs = document.createElement('canvas');
+      cvs.width = 14; cvs.height = 14;
+      PitchPlot.drawLegendShape(cvs, shape, NEUTRAL_COLOR, '#333');
+      item.appendChild(cvs);
+      const txt = document.createElement('span');
+      txt.textContent = label;
+      item.appendChild(txt);
+      container.appendChild(item);
+    });
+  }
 })();
