@@ -1,0 +1,376 @@
+/* ===== リセット & ベース ===== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans',
+               'Noto Sans JP', sans-serif;
+  background: #eef1f6;
+  color: #1a1a2e;
+  min-height: 100vh;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* ===== ヘッダー ===== */
+header {
+  background: linear-gradient(135deg, #0d2137 0%, #1a3a5c 100%);
+  color: #fff;
+  padding: 14px 24px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+}
+
+header .logo {
+  font-size: 9px;
+  letter-spacing: 0.5px;
+  opacity: 0.7;
+  font-weight: 400;
+  margin-top: 2px;
+}
+
+header h1 {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+/* ===== メインコンテンツ ===== */
+main {
+  max-width: 860px;
+  margin: 24px auto;
+  padding: 0 16px 40px;
+}
+
+/* ===== カード共通 ===== */
+.card {
+  background: #fff;
+  border-radius: 10px;
+  padding: 20px 24px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+  margin-bottom: 18px;
+}
+
+.card h2 {
+  font-size: 15px;
+  font-weight: 700;
+  color: #0d2137;
+  margin-bottom: 14px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #e8edf3;
+}
+
+/* ===== アップロードエリア ===== */
+.upload-area {
+  border: 2px dashed #b0bac8;
+  border-radius: 8px;
+  padding: 28px 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color .2s, background .2s;
+  background: #f9fafc;
+}
+
+.upload-area:hover, .upload-area.dragover {
+  border-color: #1a3a5c;
+  background: #eef3fa;
+}
+
+.upload-area .upload-icon { font-size: 28px; margin-bottom: 6px; }
+.upload-area p { color: #666; font-size: 13px; }
+.upload-area input[type="file"] { display: none; }
+
+.upload-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.data-status {
+  margin-top: 10px;
+  font-size: 13px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  min-height: 28px;
+}
+.data-status.success { background: #e8f5e9; color: #2e7d32; }
+.data-status.error   { background: #fce4e4; color: #c62828; }
+.data-status.loading { background: #e3f2fd; color: #1565c0; }
+.data-status.warning { background: #fff8e1; color: #f57f17; }
+
+/* ===== ボタン ===== */
+.btn {
+  padding: 7px 16px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  transition: opacity .15s, transform .1s;
+}
+.btn:hover { opacity: 0.88; transform: translateY(-1px); }
+.btn:active { transform: translateY(0); }
+
+.btn-primary   { background: #1a3a5c; color: #fff; }
+.btn-secondary { background: #e0e7ef; color: #1a3a5c; }
+.btn-danger    { background: #fce4e4; color: #c62828; }
+
+/* ===== フィルター ===== */
+.filters {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.filters input, .filters select {
+  padding: 7px 10px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  font-size: 13px;
+  flex: 1;
+  min-width: 120px;
+  background: #fff;
+}
+
+.filters input:focus, .filters select:focus {
+  outline: none;
+  border-color: #1a3a5c;
+}
+
+/* ===== テーブル ===== */
+.table-wrap { overflow-x: auto; }
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+thead tr {
+  background: #0d2137;
+  color: #fff;
+}
+
+th {
+  padding: 10px 12px;
+  text-align: left;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+th.num, td.num {
+  text-align: right;
+}
+
+td {
+  padding: 9px 12px;
+  border-bottom: 1px solid #eef0f4;
+  vertical-align: middle;
+}
+
+tbody tr:hover { background: #f4f7fb; }
+
+td a {
+  color: #1a3a5c;
+  text-decoration: none;
+  font-weight: 600;
+}
+td a:hover { text-decoration: underline; color: #2a6099; }
+
+/* ===== 打者詳細ページ ===== */
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #1a3a5c;
+  text-decoration: none;
+  font-size: 13px;
+  margin-bottom: 14px;
+  padding: 5px 0;
+  font-weight: 500;
+}
+.back-link:hover { text-decoration: underline; }
+
+.batter-header {
+  background: linear-gradient(135deg, #0d2137, #1a3a5c);
+  color: #fff;
+  border-radius: 10px;
+  padding: 16px 22px;
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  box-shadow: 0 3px 12px rgba(13,33,55,0.2);
+}
+
+.batter-header h2 {
+  font-size: 22px;
+  font-weight: 800;
+  margin: 0;
+}
+
+.batter-badge {
+  background: rgba(255,255,255,0.15);
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* 基本成績グリッド */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+  gap: 10px;
+  margin-bottom: 0;
+}
+
+.stat-box {
+  background: #f4f7fb;
+  border-radius: 7px;
+  padding: 10px 8px;
+  text-align: center;
+}
+
+.stat-box .stat-label {
+  font-size: 11px;
+  color: #666;
+  margin-bottom: 4px;
+}
+
+.stat-box .stat-value {
+  font-size: 20px;
+  font-weight: 800;
+  color: #0d2137;
+  line-height: 1;
+}
+
+/* タブ */
+.tab-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.tab-btn {
+  padding: 6px 14px;
+  border: 1.5px solid #c5cfe0;
+  border-radius: 20px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: #445;
+  transition: all .15s;
+  white-space: nowrap;
+}
+
+.tab-btn:hover {
+  border-color: #1a3a5c;
+  background: #eef3fa;
+  color: #1a3a5c;
+}
+
+.tab-btn.active {
+  background: #1a3a5c;
+  color: #fff;
+  border-color: #1a3a5c;
+}
+
+/* チャートセクション */
+.chart-section {
+  background: #fff;
+  border-radius: 10px;
+  padding: 18px 22px;
+  margin-bottom: 16px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+}
+
+.chart-section h3 {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0d2137;
+  margin-bottom: 12px;
+}
+
+.chart-row {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.zone-chart-wrap, .pitch-plot-wrap {
+  display: flex;
+  justify-content: center;
+  flex: 1 1 280px;
+}
+
+canvas { max-width: 100%; height: auto; }
+
+/* 投球散布図コントロール */
+.pitch-toggles {
+  display: flex;
+  gap: 14px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  user-select: none;
+}
+
+.toggle-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: #1a3a5c;
+}
+
+.legend-row {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: #444;
+  transition: opacity .15s;
+}
+
+.legend-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  display: inline-block;
+  border: 1.5px solid rgba(0,0,0,0.25);
+}
+
+.legend-item.called   .legend-dot { background: #F5A623; border-color: #B87800; }
+.legend-item.swinging .legend-dot { background: #E83030; border-color: #A00000; }
+.legend-item.hit      .legend-dot { background: #27AE60; border-color: #1A7A40; }
+
+/* ===== レスポンシブ ===== */
+@media (max-width: 600px) {
+  main { padding: 0 10px 30px; }
+  header h1 { font-size: 15px; }
+  .batter-header h2 { font-size: 18px; }
+  .chart-row { flex-direction: column; }
+  .tab-btn { font-size: 11px; padding: 5px 10px; }
+}

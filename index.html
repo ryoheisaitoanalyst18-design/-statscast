@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>東京六大学野球 StatCast</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="logo">TOKYO BIG6 BASEBALL</div>
+    <h1>⚾ StatCast</h1>
+  </div>
+</header>
+
+<main>
+
+  <!-- データ読み込み -->
+  <div class="card">
+    <h2>データ読み込み</h2>
+    <div class="upload-area" id="upload-area">
+      <div class="upload-icon">📂</div>
+      <p>TrackMan CSVファイルをドロップ、またはクリックして選択</p>
+      <p style="font-size:11px;color:#aaa;margin-top:4px">
+        複数ファイル対応 ／ data/data.csv を置くと自動読み込み
+      </p>
+      <input type="file" id="csv-input" accept=".csv,.CSV" multiple>
+    </div>
+    <div class="upload-actions">
+      <button class="btn btn-danger" id="clear-data-btn">データを削除</button>
+    </div>
+    <div class="data-status" id="data-status"></div>
+  </div>
+
+  <!-- 打者一覧 -->
+  <div class="card" id="batter-list-section" style="display:none">
+    <h2>打者一覧</h2>
+    <div class="filters">
+      <input type="text" id="search-input" placeholder="🔍 選手名で検索...">
+      <select id="team-filter">
+        <option value="">全チーム</option>
+      </select>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>選手名</th>
+            <th>チーム</th>
+            <th class="num">打数</th>
+            <th class="num">安打</th>
+            <th class="num">打率</th>
+            <th class="num">三振</th>
+            <th class="num">四球</th>
+          </tr>
+        </thead>
+        <tbody id="batter-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"
+  integrity="sha512-dfX5uYVXzyU8+KHqj8bjo7UkOdg18PaOtpa48djpNbZHwExddghZ+ZmzWT06R5v6NSk3ZUfsH6FNEDepLx9hA=="
+  crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="js/datastore.js"></script>
+<script src="js/index.js"></script>
+</body>
+</html>
