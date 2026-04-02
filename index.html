@@ -22,11 +22,11 @@
     <h2>データ読み込み</h2>
     <div class="upload-area" id="upload-area">
       <div class="upload-icon">📂</div>
-      <p>TrackMan CSVファイルをドロップ、またはクリックして選択</p>
+      <p>TrackMan Excel / CSV ファイルをドロップ、またはクリックして選択</p>
       <p style="font-size:11px;color:#aaa;margin-top:4px">
-        複数ファイル対応 ／ data/data.csv を置くと自動読み込み
+        複数ファイル対応（.xlsx / .xls / .csv）／ data/data.csv を置くと自動読み込み
       </p>
-      <input type="file" id="csv-input" accept=".csv,.CSV" multiple>
+      <input type="file" id="csv-input" accept=".csv,.CSV,.xlsx,.xls,.xlsm" multiple>
     </div>
     <div class="upload-actions">
       <button class="btn btn-danger" id="clear-data-btn">データを削除</button>
@@ -63,6 +63,8 @@
 
 </main>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"
+  crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"
   integrity="sha512-dfX5uYVXzyU8+KHqj8bjo7UkOdg18PaOtpa48djpNbZHwExddghZ+ZmzWT06R5v6NSk3ZUfsH6FNEDepLx9hA=="
   crossorigin="anonymous" referrerpolicy="no-referrer"></script>

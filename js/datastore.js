@@ -32,6 +32,18 @@ const STATSCAST = (() => {
     }));
   }
 
+  function parseExcel(arrayBuffer) {
+    const workbook = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array' });
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+    return rows.map(row => ({
+      ...row,
+      PlateLocHeight: parseFloat(row.PlateLocHeight),
+      PlateLocSide: parseFloat(row.PlateLocSide),
+    }));
+  }
+
   function loadStoredData() {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
@@ -137,8 +149,8 @@ const STATSCAST = (() => {
         zones[idx].whiff_count++;
       }
 
-      // 打率：結果球（打数になるもの）を分母、安打を分子
-      if (isAtBatEnding(pitch)) {
+      // 打率：結果球（InPlay・三振・四球・HBP）を分母、安打を分子
+      if (isResultPitch(pitch)) {
         zones[idx].ba_total++;
         if (isHit(pitch)) zones[idx].ba_hits++;
       }
@@ -178,7 +190,7 @@ const STATSCAST = (() => {
   }
 
   return {
-    parseCSV, loadStoredData, saveData, mergeData, clearData,
+    parseCSV, parseExcel, loadStoredData, saveData, mergeData, clearData,
     getBatterList, getTeams, getPitchTypes, filterPitches,
     getZoneStats, getBatterPitches, tryLoadFromFile,
     ZONE_X, ZONE_Z,

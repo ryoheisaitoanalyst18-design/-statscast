@@ -57,18 +57,24 @@
   });
 
   async function handleFiles(files) {
-    const csvFiles = files.filter(f => /\.(csv)$/i.test(f.name));
-    if (csvFiles.length === 0) {
-      setStatus('CSVファイルを選択してください', 'error');
+    const validFiles = files.filter(f => /\.(csv|xlsx|xls|xlsm)$/i.test(f.name));
+    if (validFiles.length === 0) {
+      setStatus('CSVまたはExcelファイルを選択してください', 'error');
       return;
     }
-    setStatus(`${csvFiles.length} 件を読み込み中...`, 'loading');
+    setStatus(`${validFiles.length} 件を読み込み中...`, 'loading');
 
     let newPitches = [];
-    for (const file of csvFiles) {
+    for (const file of validFiles) {
       try {
-        const text = await readFile(file);
-        const parsed = STATSCAST.parseCSV(text);
+        let parsed;
+        if (/\.(xlsx|xls|xlsm)$/i.test(file.name)) {
+          const buffer = await readFileAsArrayBuffer(file);
+          parsed = STATSCAST.parseExcel(buffer);
+        } else {
+          const text = await readFile(file);
+          parsed = STATSCAST.parseCSV(text);
+        }
         newPitches = newPitches.concat(parsed);
       } catch (e) {
         console.error('ファイル読み込みエラー:', file.name, e);
@@ -106,6 +112,15 @@
       reader.onload = e => resolve(e.target.result);
       reader.onerror = reject;
       reader.readAsText(file, 'UTF-8');
+    });
+  }
+
+  function readFileAsArrayBuffer(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = e => resolve(e.target.result);
+      reader.onerror = reject;
+      reader.readAsArrayBuffer(file);
     });
   }
 
