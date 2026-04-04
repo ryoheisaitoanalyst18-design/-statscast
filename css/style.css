@@ -233,6 +233,22 @@ canvas { max-width: 100%; height: auto; }
 .pitch-type-table td.num { text-align: right; }
 .pitch-type-table tbody tr:hover { background: #f4f7fb; }
 
+/* ===== 結果フィルターボタン（打者ページ） ===== */
+.result-filter-btns { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.result-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 16px; border-radius: 20px; cursor: pointer;
+  font-size: 12px; font-weight: 600;
+  border: 2px solid #dde3ed; background: #f4f5f8; color: #888;
+  transition: all .15s; opacity: 0.55;
+}
+.result-btn.active { opacity: 1; }
+.result-btn.active[data-result="hit"]      { background: #e8f7ed; border-color: #27AE60; color: #1a7a40; }
+.result-btn.active[data-result="swinging"] { background: #fde8e8; border-color: #E83030; color: #a00000; }
+.result-btn.active[data-result="weak"]     { background: #eef0f5; border-color: #8899AA; color: #445566; }
+.result-btn:hover { opacity: 0.85; transform: translateY(-1px); }
+.result-btn:active { transform: translateY(0); }
+
 /* ===== レスポンシブ ===== */
 @media (max-width: 600px) {
   main { padding: 0 10px 30px; }

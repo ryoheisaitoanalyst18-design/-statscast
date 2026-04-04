@@ -134,11 +134,11 @@ const PitchPlot = (() => {
     }
   }
 
-  // ホームベース（五角形）描画
+  // ホームベース（五角形）描画 — より正確な比率
   function drawHomePlate(ctx, cx, plateTop, plateW) {
     const hw = plateW / 2;
-    const sideH = hw * 0.22;
-    const diagH = hw * 0.26;
+    const sideH = hw * 0.40;   // 縦辺（本塁板の奥行き感）
+    const diagH = hw * 0.46;   // 斜辺（後方の頂点まで）
     ctx.beginPath();
     ctx.moveTo(cx - hw, plateTop);
     ctx.lineTo(cx + hw, plateTop);
@@ -148,8 +148,8 @@ const PitchPlot = (() => {
     ctx.closePath();
     ctx.fillStyle = '#ffffff';
     ctx.fill();
-    ctx.strokeStyle = '#222';
-    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = '#1a1a2e';
+    ctx.lineWidth = 2.2;
     ctx.stroke();
   }
 
@@ -178,27 +178,40 @@ const PitchPlot = (() => {
     const bbLeftInner  = toCanvas(-BB_INNER, SZ_Z_MAX, W, H, pad).cx;
     const bbRightInner = toCanvas( BB_INNER, SZ_Z_MAX, W, H, pad).cx;
     const bbTop    = pad.t;
-    const bbBottom = szBR.cy + 2;
+    const bbBottom = szBR.cy + 6;
     const bbHeight = bbBottom - bbTop;
+    const bbLW = bbLeftInner - pad.l;
+    const bbRW = W - pad.r - bbRightInner;
 
-    ctx.fillStyle = 'rgba(160,190,230,0.08)';
-    ctx.fillRect(pad.l, bbTop, bbLeftInner - pad.l, bbHeight);
-    ctx.fillRect(bbRightInner, bbTop, W - pad.r - bbRightInner, bbHeight);
+    // 左打者エリア（三塁側）
+    ctx.fillStyle = 'rgba(60,110,200,0.10)';
+    ctx.fillRect(pad.l, bbTop, bbLW, bbHeight);
+    ctx.strokeStyle = 'rgba(50,90,180,0.65)';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(pad.l, bbTop, bbLW, bbHeight);
 
-    ctx.strokeStyle = 'rgba(60,100,180,0.35)';
-    ctx.lineWidth = 1;
-    ctx.setLineDash([5, 4]);
-    ctx.strokeRect(pad.l, bbTop, bbLeftInner - pad.l, bbHeight);
-    ctx.strokeRect(bbRightInner, bbTop, W - pad.r - bbRightInner, bbHeight);
-    ctx.setLineDash([]);
+    // 右打者エリア（一塁側）
+    ctx.fillStyle = 'rgba(200,80,50,0.10)';
+    ctx.fillRect(bbRightInner, bbTop, bbRW, bbHeight);
+    ctx.strokeStyle = 'rgba(180,55,35,0.65)';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(bbRightInner, bbTop, bbRW, bbHeight);
+
+    // 内端ライン（ホームベース端との境界を強調）
+    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = 'rgba(50,90,180,0.85)';
+    ctx.beginPath(); ctx.moveTo(bbLeftInner, bbTop); ctx.lineTo(bbLeftInner, bbBottom); ctx.stroke();
+    ctx.strokeStyle = 'rgba(180,55,35,0.85)';
+    ctx.beginPath(); ctx.moveTo(bbRightInner, bbTop); ctx.lineTo(bbRightInner, bbBottom); ctx.stroke();
 
     // L/R ラベル
-    ctx.fillStyle = 'rgba(50,90,170,0.4)';
-    ctx.font = 'bold 8px sans-serif';
-    ctx.textAlign = 'center';
+    ctx.font = 'bold 9px sans-serif';
     ctx.textBaseline = 'top';
-    ctx.fillText('L', pad.l + (bbLeftInner - pad.l) / 2, bbTop + 4);
-    ctx.fillText('R', bbRightInner + (W - pad.r - bbRightInner) / 2, bbTop + 4);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(40,80,180,0.80)';
+    ctx.fillText('L', pad.l + bbLW / 2, bbTop + 5);
+    ctx.fillStyle = 'rgba(170,50,30,0.80)';
+    ctx.fillText('R', bbRightInner + bbRW / 2, bbTop + 5);
 
     // ====== ストライクゾーン背景 ======
     ctx.fillStyle = 'rgba(205, 225, 255, 0.4)';
@@ -252,7 +265,7 @@ const PitchPlot = (() => {
 
     // ====== ホームベース（五角形） ======
     const plateCX = (szTL.cx + szBR.cx) / 2;
-    const plateTop = H - pad.b + 10;
+    const plateTop = szBR.cy + 8;   // ストライクゾーン下辺の直下
     drawHomePlate(ctx, plateCX, plateTop, szW);
 
     // ====== Y軸ラベル ======

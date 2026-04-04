@@ -83,27 +83,24 @@
 
     <div class="chart-row">
       <div class="zone-chart-wrap">
-        <canvas id="zone-canvas" width="360" height="400"
+        <canvas id="zone-canvas" width="360" height="480"
           aria-label="コース別ヒートマップ"></canvas>
       </div>
 
       <!-- 投球散布図 -->
       <div style="flex:1 1 300px">
-        <h3 style="margin-bottom:8px">インパクトコース分布</h3>
-
-        <div class="pitch-toggles">
-          <label class="toggle-label">
-            <input type="checkbox" id="toggle-hit" checked>
+        <h3 style="margin-bottom:10px">インパクトコース分布</h3>
+        <div style="font-size:11px;color:#888;margin-bottom:6px">表示する結果を選択（複数可）</div>
+        <div class="result-filter-btns">
+          <button class="result-btn active" data-result="hit">
             <span class="toggle-dot hit"></span>安打
-          </label>
-          <label class="toggle-label">
-            <input type="checkbox" id="toggle-swinging" checked>
+          </button>
+          <button class="result-btn active" data-result="swinging">
             <span class="toggle-dot swinging"></span>空振り
-          </label>
-          <label class="toggle-label">
-            <input type="checkbox" id="toggle-weak" checked>
+          </button>
+          <button class="result-btn active" data-result="weak">
             <span class="toggle-dot weak"></span>凡打
-          </label>
+          </button>
         </div>
 
         <div class="pitch-plot-wrap">

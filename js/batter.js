@@ -117,18 +117,16 @@
     update();
   });
 
-  // トグル
-  document.getElementById('toggle-hit').addEventListener('change', e => {
-    showHit = e.target.checked;
-    update();
-  });
-  document.getElementById('toggle-swinging').addEventListener('change', e => {
-    showSwinging = e.target.checked;
-    update();
-  });
-  document.getElementById('toggle-weak').addEventListener('change', e => {
-    showWeak = e.target.checked;
-    update();
+  // 結果フィルターボタン（トグル）
+  document.querySelectorAll('.result-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const r = btn.dataset.result;
+      if (r === 'hit')      { showHit      = !showHit;      }
+      if (r === 'swinging') { showSwinging = !showSwinging; }
+      if (r === 'weak')     { showWeak     = !showWeak;     }
+      btn.classList.toggle('active', r === 'hit' ? showHit : r === 'swinging' ? showSwinging : showWeak);
+      update();
+    });
   });
 
   // 初回描画

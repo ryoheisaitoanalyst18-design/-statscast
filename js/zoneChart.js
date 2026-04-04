@@ -50,8 +50,8 @@ const ZoneChart = (() => {
 
   function drawHomePlate(ctx, cx, plateTop, plateW) {
     const hw = plateW / 2;
-    const sideH = Math.max(10, hw * 0.18);
-    const diagH = Math.max(12, hw * 0.22);
+    const sideH = hw * 0.38;   // より正確な比率
+    const diagH = hw * 0.44;
     ctx.beginPath();
     ctx.moveTo(cx - hw, plateTop);
     ctx.lineTo(cx + hw, plateTop);
@@ -61,9 +61,10 @@ const ZoneChart = (() => {
     ctx.closePath();
     ctx.fillStyle = '#ffffff';
     ctx.fill();
-    ctx.strokeStyle = '#444';
-    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = '#1a1a2e';
+    ctx.lineWidth = 2;
     ctx.stroke();
+    return sideH + diagH;   // プレートの高さを返す
   }
 
   function draw(canvas, zoneStats, statType) {
@@ -75,38 +76,37 @@ const ZoneChart = (() => {
     ctx.fillStyle = '#f5f6fa';
     ctx.fillRect(0, 0, W, H);
 
-    // Padding: extra bottom for home plate + color bar
-    const pad = { top: 22, right: 18, bottom: 82, left: 52 };
+    // 下部パディング：プレート + カラーバー + 余白を動的計算
+    const _hw_est = (W - 52 - 18) * 0.96 / 2;
+    const _plateH_est = Math.ceil(_hw_est * (0.38 + 0.44));
+    const _padBottom = _plateH_est + 54;   // プレート + バー + ラベル分
+    const pad = { top: 22, right: 18, bottom: _padBottom, left: 52 };
     const zoneAreaW = W - pad.left - pad.right;
     const zoneAreaH = H - pad.top - pad.bottom;
     const cellW = zoneAreaW / 3;
     const cellH = zoneAreaH / 3;
 
-    // ====== Batter's box indicators (left & right of zone) ======
-    const bbW = 12; // pixel width of indicator strip
-    const bbGap = 4; // gap between zone and indicator
+    // ====== バッターボックス（左右） ======
+    const bbW = 20;  // 幅（可視化用）
+    const bbGap = 5;
     const bbTop = pad.top;
     const bbH = zoneAreaH;
 
-    // Left batter's box (third base side)
+    // 左打者エリア（三塁側）
     const lbx = pad.left - bbGap - bbW;
-    ctx.fillStyle = 'rgba(80,130,200,0.07)';
+    ctx.fillStyle = 'rgba(60,110,200,0.10)';
     ctx.fillRect(lbx, bbTop, bbW, bbH);
-    ctx.strokeStyle = 'rgba(80,130,200,0.35)';
-    ctx.lineWidth = 1;
-    ctx.setLineDash([4, 3]);
+    ctx.strokeStyle = 'rgba(50,90,180,0.65)';
+    ctx.lineWidth = 1.5;
     ctx.strokeRect(lbx, bbTop, bbW, bbH);
-    ctx.setLineDash([]);
 
-    // Right batter's box (first base side)
+    // 右打者エリア（一塁側）
     const rbx = pad.left + zoneAreaW + bbGap;
-    ctx.fillStyle = 'rgba(80,130,200,0.07)';
+    ctx.fillStyle = 'rgba(200,80,50,0.10)';
     ctx.fillRect(rbx, bbTop, bbW, bbH);
-    ctx.strokeStyle = 'rgba(80,130,200,0.35)';
-    ctx.lineWidth = 1;
-    ctx.setLineDash([4, 3]);
+    ctx.strokeStyle = 'rgba(180,55,35,0.65)';
+    ctx.lineWidth = 1.5;
     ctx.strokeRect(rbx, bbTop, bbW, bbH);
-    ctx.setLineDash([]);
 
     // ====== Zone cells ======
     for (let row = 0; row < 3; row++) {
@@ -178,21 +178,22 @@ const ZoneChart = (() => {
       ctx.fillText(label, x, colLabelY);
     });
 
-    // ====== Home plate ======
+    // ====== ホームベース ======
     const plateCX = pad.left + zoneAreaW / 2;
-    const plateTop = pad.top + zoneAreaH + 24;
-    drawHomePlate(ctx, plateCX, plateTop, zoneAreaW * 0.96);
+    const plateTop = pad.top + zoneAreaH + 20;
+    const plateActualH = drawHomePlate(ctx, plateCX, plateTop, zoneAreaW * 0.96);
 
-    // ====== Batter box labels ======
-    ctx.fillStyle = 'rgba(60,100,170,0.55)';
+    // ====== バッターボックスラベル ======
     ctx.font = 'bold 8px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
+    ctx.fillStyle = 'rgba(40,80,180,0.80)';
     ctx.fillText('L', lbx + bbW / 2, bbTop + bbH / 2);
+    ctx.fillStyle = 'rgba(170,50,30,0.80)';
     ctx.fillText('R', rbx + bbW / 2, bbTop + bbH / 2);
 
-    // ====== Color scale bar ======
-    const barY = plateTop + 38;
+    // ====== カラースケールバー（プレートの下） ======
+    const barY = plateTop + plateActualH + 10;
     drawColorBar(ctx, pad.left, barY, zoneAreaW, 8, statType);
 
     // ====== Catcher perspective note ======
