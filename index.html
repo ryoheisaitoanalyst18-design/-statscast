@@ -1,20 +1,35 @@
 <!doctype html>
 <html lang="ja">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
-  <title>東京六大学野球版 Statcast</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <script type="module" crossorigin src="/assets/index-BhQk8dUI.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-aUSSGG6q.css">
+
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+    <title>東京六大学野球版 Statcast</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <script type="module" crossorigin src="/-statscast/assets/index-D4p48S6T.js"></script>
+    <link rel="stylesheet" crossorigin href="/-statscast/assets/index-aUSSGG6q.css">
   <meta property="og:type" content="website">
-  <meta property="og:url" content="https://roaring-smakager-eb2ac4.netlify.app/">
+  <meta property="og:url" content="https://ryoheisaitoanalyst18-design.github.io/-statscast/">
   <meta property="og:title" content="東京六大学野球版 Statcast">
   <meta property="og:description" content="トラックマンデータに基づき、バレル率、ハードヒット率、空振り率などのセイバーメトリクス指標を表示する野球分析ダッシュボード。">
-</head>
-<body>
-  <div id="root"></div>
-</body>
+  </head>
+
+  <body>
+    <script>
+      (function(l) {
+        if (l.search[1] === '/') {
+          var decoded = l.search.slice(1).split('&').map(function(s) {
+            return s.replace(/~and~/g, '&');
+          }).join('?');
+          window.history.replaceState(null, null, l.pathname.slice(0, -1) + decoded + l.hash);
+        }
+      }(window.location));
+    </script>
+    <div id="root"></div>
+  </body>
+
 </html>
