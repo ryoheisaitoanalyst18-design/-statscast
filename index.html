@@ -9,71 +9,10 @@
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <script type="module" crossorigin src="/assets/index-CdziRDlg.js"></script>
   <link rel="stylesheet" crossorigin href="/assets/index-AyBPpU3F.css">
-  <script>
-  /* フィルター状態の永続化 */
-  (function () {
-    var SS = {
-      g: function(k) { try { return sessionStorage.getItem('sc_' + k); } catch(e) { return null; } },
-      s: function(k, v) { try { sessionStorage.setItem('sc_' + k, v); } catch(e) {} }
-    };
-    var _restoring = false;
-
-    function getNativeSet() {
-      return Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set;
-    }
-
-    function saveSelects() {
-      if (_restoring) return;
-      var sels = document.querySelectorAll('select');
-      sels.forEach(function(sel, i) {
-        SS.s('sel' + i + 'v', sel.value);
-        SS.s('sel' + i + 's', Array.from(sel.options).slice(0, 4).map(function(o) { return o.value; }).join('|'));
-      });
-    }
-
-    function restoreSelects() {
-      _restoring = true;
-      var sels = document.querySelectorAll('select');
-      sels.forEach(function(sel, i) {
-        var savedSig = SS.g('sel' + i + 's');
-        var curSig   = Array.from(sel.options).slice(0, 4).map(function(o) { return o.value; }).join('|');
-        if (!savedSig || savedSig !== curSig) return;
-        var val = SS.g('sel' + i + 'v');
-        if (!val) return;
-        var opts = Array.from(sel.options).map(function(o) { return o.value; });
-        if (!opts.includes(val) || sel.value === val) return;
-        try {
-          var nativeSet = getNativeSet();
-          nativeSet.call(sel, val);
-          sel.dispatchEvent(new Event('change', { bubbles: true }));
-        } catch(e) {}
-      });
-      setTimeout(function() { _restoring = false; }, 200);
-    }
-
-    document.addEventListener('change', function(e) {
-      if (e.target && e.target.tagName === 'SELECT') saveSelects();
-    });
-
-    function tryRestore(attempt) {
-      if (document.querySelectorAll('select').length > 0) {
-        restoreSelects();
-      } else if (attempt < 40) {
-        setTimeout(function() { tryRestore(attempt + 1); }, 100);
-      }
-    }
-
-    window.addEventListener('popstate', function() {
-      setTimeout(function() { tryRestore(0); }, 300);
-    });
-
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', function() { setTimeout(function() { tryRestore(0); }, 300); });
-    } else {
-      setTimeout(function() { tryRestore(0); }, 300);
-    }
-  })();
-  </script>
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://roaring-smakager-eb2ac4.netlify.app/">
+  <meta property="og:title" content="東京六大学野球版 Statcast">
+  <meta property="og:description" content="トラックマンデータに基づき、バレル率、ハードヒット率、空振り率などのセイバーメトリクス指標を表示する野球分析ダッシュボード。">
 </head>
 <body>
   <div id="root"></div>

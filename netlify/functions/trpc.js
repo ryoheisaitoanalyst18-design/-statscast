@@ -14,7 +14,11 @@ function fetchUpstream(urlPath) {
       hostname: UPSTREAM,
       path: urlPath,
       method: 'GET',
-      headers: { 'Accept': 'application/json' },
+      headers: {
+        'Accept': 'application/json',
+        'Referer': 'https://rokudaistats-hwdmt5h4.manus.space/',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      },
     };
     const req = https.request(options, (res) => {
       let body = '';
