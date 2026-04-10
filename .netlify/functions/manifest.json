@@ -1,0 +1,1 @@
+{"functions":[{"bundler":"zisi","buildData":{"runtimeAPIVersion":1},"mainFile":"/home/analyst18/statscast/netlify/functions/trpc.js","name":"trpc","priority":10,"runtimeVersion":"nodejs24.x","path":"/home/analyst18/statscast/.netlify/functions/trpc.zip","runtime":"js"}],"system":{"arch":"x64","platform":"linux"},"timestamp":1775457235679,"version":1}

@@ -1,1 +1,1 @@
-{"batted":[],"impacts":[{"px":0.231227,"pz":1.225652,"result":"BallCalled","pitchType":"ストレート"},{"px":-0.322329,"pz":0.763783,"result":"空振り","pitchType":"ストレート"}],"team":""}
+{"batted": [], "impacts": [{"px": 0.231227, "pz": 1.225652, "result": "BallCalled", "pitchType": "ストレート", "pitcherThrows": "Right"}, {"px": -0.322329, "pz": 0.763783, "result": "空振り", "pitchType": "ストレート", "pitcherThrows": "Right"}], "team": ""}

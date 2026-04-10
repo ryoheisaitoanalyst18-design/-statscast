@@ -1,0 +1,55 @@
+functionsDirectory = "/home/analyst18/statscast/netlify/functions"
+functionsDirectoryOrigin = "config-v1"
+redirectsOrigin = "config"
+plugins = []
+headers = []
+
+[build]
+publish = "/home/analyst18/statscast"
+publishOrigin = "ui"
+functions = "/home/analyst18/statscast/netlify/functions"
+
+[build.environment]
+
+[build.processing]
+
+[build.processing.css]
+
+[build.processing.html]
+
+[build.processing.images]
+
+[build.processing.js]
+
+[build.services]
+
+[functions]
+
+[functions.trpc]
+included_files = ["netlify/functions/data/**"]
+
+[functions."*"]
+
+[[redirects]]
+from = "/api/trpc/*"
+to = "/.netlify/functions/trpc"
+status = 200.0
+force = false
+
+[redirects.query]
+
+[redirects.conditions]
+
+[redirects.headers]
+
+[[redirects]]
+from = "/*"
+to = "/index.html"
+status = 200.0
+force = false
+
+[redirects.query]
+
+[redirects.conditions]
+
+[redirects.headers]
