@@ -1,0 +1,14 @@
+# Claude Code — personal/local settings (never commit; may contain tokens)
+.claude/settings.local.json
+
+# Secrets / credentials
+.env
+.env.*
+*.pem
+*credentials*
+
+# Netlify local state (contains site IDs / tokens)
+.netlify/
+
+# OS / editor cruft
+.DS_Store
