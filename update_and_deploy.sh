@@ -63,8 +63,8 @@ BUILD_TARGET=ghpages npx vite build 2>&1 | tail -10
 NEW_JS=$(ls "$ROKUDAI_DIR/dist/public/assets/index-"*.js 2>/dev/null | head -1)
 NEW_CSS=$(ls "$ROKUDAI_DIR/dist/public/assets/index-"*.css 2>/dev/null | head -1)
 
-if [ -z "$NEW_JS" ]; then
-    echo "エラー: ビルド成果物が見つかりません"
+if [ -z "$NEW_JS" ] || [ -z "$NEW_CSS" ]; then
+    echo "エラー: ビルド成果物が見つかりません (JS: ${NEW_JS:-なし}, CSS: ${NEW_CSS:-なし})"
     exit 1
 fi
 
