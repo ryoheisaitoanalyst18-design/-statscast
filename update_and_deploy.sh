@@ -80,11 +80,12 @@ echo "[3/4] アセット更新中..."
 cp "$NEW_JS" "$SCRIPT_DIR/assets/"
 cp "$NEW_CSS" "$SCRIPT_DIR/assets/"
 
-# Update index.html JS/CSS reference (match full path including /-statscast/ prefix)
+# Update index.html / 404.html JS/CSS references (match full path including /-statscast/ prefix)
+# 404.html is identical to index.html and also needs updating so deep links load the latest bundle.
 cd "$SCRIPT_DIR"
-sed -i "s|/-statscast/assets/index-[A-Za-z0-9_-]*\.js|/-statscast/assets/$JS_FILENAME|g" index.html
-sed -i "s|/-statscast/assets/index-[A-Za-z0-9_-]*\.css|/-statscast/assets/$CSS_FILENAME|g" index.html
-echo "index.html 更新完了 (JS: $JS_FILENAME, CSS: $CSS_FILENAME)"
+sed -i "s|/-statscast/assets/index-[A-Za-z0-9_-]*\.js|/-statscast/assets/$JS_FILENAME|g" index.html 404.html
+sed -i "s|/-statscast/assets/index-[A-Za-z0-9_-]*\.css|/-statscast/assets/$CSS_FILENAME|g" index.html 404.html
+echo "index.html, 404.html 更新完了 (JS: $JS_FILENAME, CSS: $CSS_FILENAME)"
 
 # ============================================================
 # Step 4: Gitコミット・プッシュ
