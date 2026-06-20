@@ -79,6 +79,9 @@ echo ""
 echo "[3/4] アセット更新中..."
 cp "$NEW_JS" "$SCRIPT_DIR/assets/"
 cp "$NEW_CSS" "$SCRIPT_DIR/assets/"
+# 旧バンドルを削除（コピー成功後なので安全）
+find "$SCRIPT_DIR/assets/" -name "index-*.js" ! -name "$JS_FILENAME" -delete
+find "$SCRIPT_DIR/assets/" -name "index-*.css" ! -name "$CSS_FILENAME" -delete
 
 # Update index.html JS/CSS reference (match full path including /-statscast/ prefix)
 cd "$SCRIPT_DIR"
