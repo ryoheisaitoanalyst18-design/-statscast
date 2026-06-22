@@ -84,7 +84,9 @@ cp "$NEW_CSS" "$SCRIPT_DIR/assets/"
 cd "$SCRIPT_DIR"
 sed -i "s|/-statscast/assets/index-[A-Za-z0-9_-]*\.js|/-statscast/assets/$JS_FILENAME|g" index.html
 sed -i "s|/-statscast/assets/index-[A-Za-z0-9_-]*\.css|/-statscast/assets/$CSS_FILENAME|g" index.html
-echo "index.html 更新完了 (JS: $JS_FILENAME, CSS: $CSS_FILENAME)"
+sed -i "s|/-statscast/assets/index-[A-Za-z0-9_-]*\.js|/-statscast/assets/$JS_FILENAME|g" 404.html
+sed -i "s|/-statscast/assets/index-[A-Za-z0-9_-]*\.css|/-statscast/assets/$CSS_FILENAME|g" 404.html
+echo "index.html / 404.html 更新完了 (JS: $JS_FILENAME, CSS: $CSS_FILENAME)"
 
 # ============================================================
 # Step 4: Gitコミット・プッシュ
