@@ -12,3 +12,6 @@
 
 # OS / editor cruft
 .DS_Store
+
+# Pipeline output not used by the frontend (loader exists but no component calls it)
+data/players/batter_zones/
