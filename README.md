@@ -1,42 +1,43 @@
 # 東京六大学野球 StatCast
 
-TrackMan データを使った打者成績ビジュアライゼーションサイト。
+TrackMan 計測データを基に、打者・投手の Statcast 風指標・3D 軌道可視化・モデル出力（Stuff+, xwOBA）を公開する分析サイト。
 
-## 使い方
+**公開 URL**: https://ryoheisaitoanalyst18-design.github.io/-statscast/
 
-### データの読み込み方法
+## 主な機能
 
-**方法1: Claude Code 経由（推奨）**
-1. TrackMan CSVファイルをClaudeに渡す
-2. Claudeが `data/data.csv` として保存
-3. サイトを開くと自動で読み込まれる
+### 打者・投手リーダーボード
+- 打者: AVG / OBP / SLG / wOBA / wRC+ / K% / BB% / HardHit% / xwOBA 等
+- 投手: Whiff% / CSW% / Zone% / FIP / WHIP / Stuff+ 等
+- 球速・回転数・変化量（IVB / HB）
 
-**方法2: ブラウザからアップロード**
-1. サイトを開き、CSVファイルをドラッグ＆ドロップ
-2. データはブラウザに保存される
+### 選手詳細ページ
+- コース別・カウント別の成績分布
+- 打球軌道 / 投球軌道の 3D 可視化（神宮球場モデル）
 
-### ローカルでの起動
+### チーム傾向分析
+- ゾーン別打率・空振り率（対右・対左）
+- カウント別投球戦略
+
+### 高度モデル
+- **Stuff+**: 投球の質を 100 標準化したスコア（球種・球速・変化量を統合）
+- **xwOBA / xBA / xSLG**: 打球品質ベースの期待値指標
+
+## ローカル確認
 
 ```bash
-cd statscast
 python3 -m http.server 8080
 # ブラウザで http://localhost:8080 を開く
 ```
 
-## 表示内容
+## 指標の計算式
 
-### トップページ
-- 打者一覧（チーム別フィルター・名前検索）
-- 打数・安打・打率・三振・四球
+[METRICS_FORMULAS.md](METRICS_FORMULAS.md) を参照。
 
-### 打者詳細ページ（打者名をクリック）
-- **コース別打率**: そのコースの安打 ÷ そのコースへの結果球（打数）
-- **空振り率**: そのコースの空振り ÷ そのコースへの全投球
-- **ゴロ率**: そのコースのゴロ ÷ そのコースで打った打球全体
-- 球種フィルター（全球種 / ストレート / スライダー など）
-- **投球散布図**: 見逃し・空振り・安打を選択表示（ボールは非表示）
+## リポジトリ構成
 
-## TrackMan CSVフォーマット
+このリポジトリはビルド成果物（`assets/`）と公開データ（`data/`）の置き場です。
+フロントエンドのソースコードとデータパイプラインはそれぞれ別リポジトリで管理されており、
+`main` への push が GitHub Pages への本番デプロイになります。
 
-TrackManのエクスポートCSVをそのまま使用可能。
-主要カラム: `Batter`, `BatterTeam`, `PitchCall`, `KorBB`, `PlayResult`, `TaggedHitType`, `TaggedPitchType`, `PlateLocSide`, `PlateLocHeight`
+`<meta name="robots" content="noindex, nofollow">` は意図的な設定（検索非掲載）です。
