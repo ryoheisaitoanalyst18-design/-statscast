@@ -89,8 +89,10 @@ if [ "$MODE" != "frontend-only" ]; then
   # players/batter_zones はフロント未使用 (2026-07確認: ローダー定義のみ残存・
   # バンドル参照ゼロ) のため公開しない。パイプラインは生成し続けるが同期除外。
   rsync -a --exclude 'players/batter_zones' "$PIPELINE_DATA/" "$REPO_DIR/data/"
-  [ -d "$PIPELINE_DATA/teams" ]  && rsync -a --delete "$PIPELINE_DATA/teams/"  "$REPO_DIR/data/teams/"
-  [ -d "$PIPELINE_DATA/models" ] && rsync -a --delete "$PIPELINE_DATA/models/" "$REPO_DIR/data/models/"
+  # パイプライン完全所有のサブディレクトリは --delete で残骸 (姓名揺れの旧ファイル等) を掃除
+  for SUB in teams models players/batter_detail players/pitcher_detail; do
+    [ -d "$PIPELINE_DATA/$SUB" ] && rsync -a --delete "$PIPELINE_DATA/$SUB/" "$REPO_DIR/data/$SUB/"
+  done
   echo "データ同期完了"
 else
   echo ""; echo "━━━ 2-3/7 データ同期: スキップ (frontend-only) ━━━"
@@ -132,7 +134,7 @@ git add data assets index.html 404.html scripts 2>/dev/null || true
 if git diff --staged --quiet; then
   echo "変更なし。コミットをスキップ。"; exit 0
 fi
-git status -s | grep -E "^[MADR]" | head -8
+git status -s | { grep -E "^[MADR]" || true; } | head -8 || true  # head早期closeのSIGPIPE(141)をpipefailから守る
 echo "  ... (staged $(git diff --staged --name-only | wc -l) files)"
 
 if [ "$NO_PUSH" = 1 ]; then

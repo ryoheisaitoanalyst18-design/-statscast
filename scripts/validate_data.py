@@ -113,6 +113,17 @@ def check_year_data(data_dir, year):
     if bad == 0:
         ok(f"{name}: 投手{len(d['pitcherLeaderboard'])}行の不変条件")
 
+    # Zone% 回帰チェック: is_zone が feet 境界でメートル座標を判定していた頃は
+    # 中央値 0.6% だった (2026-07-04 修正)。正常値は 40% 前後。
+    zq = [r["Zone_pct"] for r in d["pitcherLeaderboard"]
+          if r.get("TotalPitches", 0) >= 200 and r.get("Zone_pct") is not None]
+    if len(zq) >= 5:
+        zmed = sorted(zq)[len(zq) // 2]
+        if 30 <= zmed <= 60:
+            ok(f"{name}: Zone%中央値 {zmed:.1f}")
+        else:
+            ng(f"{name}: Zone%中央値異常", f"{zmed:.1f} (期待30-60)")
+
     teams = {t.get("Team") for t in d["teamBatting"]}
     if teams <= VALID_TEAMS and len(teams) >= 2:
         ok(f"{name}: チーム構成")
