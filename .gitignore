@@ -15,3 +15,6 @@
 
 # Pipeline output not used by the frontend (loader exists but no component calls it)
 data/players/batter_zones/
+
+# cleanup_stale_details.py が生成するレポートファイル (ローカル実行ごとに変わる)
+scripts/cleanup_report_*.txt
