@@ -99,12 +99,17 @@ index.html / 404.html の `<meta name="robots" content="noindex, nofollow">` は
 残骸はフロント未参照だが「データ欠落」に見える事故源。
 
 ```bash
-python3 scripts/cleanup_stale_details.py           # dry-run: 対象一覧と件数
-python3 scripts/cleanup_stale_details.py --delete  # 実削除 (前後で validate 自動実行)
+python3 scripts/cleanup_stale_details.py [DATA_DIR]            # dry-run: 対象一覧と件数
+python3 scripts/cleanup_stale_details.py [DATA_DIR] --delete   # 実削除 (前後で validate 自動実行)
 ```
 
 正解集合は「全 yearData_*.json のリーダーボード名の和集合」。選手 JSON を調査するときも
 必ずリーダーボード名から辿ること (ディレクトリ全走査は残骸に惑わされる)。
+
+**重要: 必ずパイプライン出力側 (`~/statscast/data`) も掃除する。** データ同期は
+パイプライン→リポジトリの `rsync --delete` ミラーのため、リポジトリ側だけ削除しても
+パイプライン側に残骸が残っていると**次回のデータデプロイで復活し再コミットされる**。
+手順: `DATA_DIR` にパイプライン側を指定して dry-run→--delete → リポジトリ側も同様に実行。
 
 ### 夜間エージェント PR の棚卸し (週 1)
 

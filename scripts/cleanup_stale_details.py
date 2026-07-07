@@ -5,11 +5,16 @@ PYTHONHASHSEED による姓名順反転で過去のパイプライン実行時�
 姓名順違いの残骸JSONが蓄積する問題に対処するスクリプト。
 
 使い方:
-  python3 scripts/cleanup_stale_details.py          # dry-run (デフォルト)
-  python3 scripts/cleanup_stale_details.py --delete  # 実際に削除する
+  python3 scripts/cleanup_stale_details.py [DATA_DIR]            # dry-run (デフォルト)
+  python3 scripts/cleanup_stale_details.py [DATA_DIR] --delete   # 実際に削除する
+
+  DATA_DIR 省略時はリポジトリの data/。パイプライン出力側 (例: ~/statscast/data) を
+  指定して掃除することもできる。**リポジトリ側だけ消しても、データ同期が
+  パイプライン→リポジトリの --delete ミラーのため次回デプロイで復活する。
+  必ずパイプライン側も掃除すること** (docs/OPERATIONS.md 参照)。
 
 安全ガード:
-  - 削除前後に validate_data.py --skip-html を実行し、FAILがあれば中断
+  - 削除前後に validate_data.py <DATA_DIR> --skip-html を実行し、FAILがあれば中断
   - dry-run では何も削除しない
 
 出力:
@@ -71,11 +76,11 @@ def find_stale(players_dir, detail_subdir, canonical):
     return stale
 
 
-def run_validate(script_dir):
-    """validate_data.py --skip-html を実行し、終了コードを返す。"""
+def run_validate(script_dir, data_dir):
+    """validate_data.py <data_dir> --skip-html を実行し、終了コードを返す。"""
     validate_script = os.path.join(script_dir, "validate_data.py")
     result = subprocess.run(
-        [sys.executable, validate_script, "--skip-html"],
+        [sys.executable, validate_script, data_dir, "--skip-html"],
         capture_output=True, text=True
     )
     print(result.stdout, end="")
@@ -86,9 +91,14 @@ def run_validate(script_dir):
 
 def main():
     do_delete = "--delete" in sys.argv
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    data_dir = os.path.normpath(os.path.join(script_dir, "..", "data"))
+    if args:
+        data_dir = os.path.normpath(os.path.abspath(args[0]))
+    else:
+        data_dir = os.path.normpath(os.path.join(script_dir, "..", "data"))
     players_dir = os.path.join(data_dir, "players")
+    print(f"対象: {data_dir}")
 
     print(f"{'=== 削除モード ===' if do_delete else '=== DRY-RUN モード (--delete で実削除) ==='}")
 
@@ -123,7 +133,7 @@ def main():
 
     # 削除前の安全ガード
     print("\n--- 削除前の検証 ---")
-    if run_validate(script_dir) != 0:
+    if run_validate(script_dir, data_dir) != 0:
         print("✗ 削除前の validate_data.py が FAIL — 削除を中断します")
         return 1
 
@@ -134,7 +144,7 @@ def main():
 
     # 削除後の安全ガード
     print("\n--- 削除後の検証 ---")
-    if run_validate(script_dir) != 0:
+    if run_validate(script_dir, data_dir) != 0:
         print("✗ 削除後の validate_data.py が FAIL — 手動で確認してください")
         return 1
 
