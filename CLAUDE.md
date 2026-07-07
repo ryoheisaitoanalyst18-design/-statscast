@@ -61,7 +61,8 @@ python3 scripts/validate_data.py          # データ+HTML の整合性ゲート
 | `models/xwoba_grid.json` / `models_meta.json` | ランドスケープ / 方法論・検証値 | 生JSON |
 | `run_expectancy.json` / `defenseData.json` | RE行列 / 守備 (手動系、消さない) | — |
 
-`players/batter_zones/` はフロント未使用のため公開しない (.gitignore 済み)。
+`players/batter_zones/` と `dates_2026.json` はフロント未使用のため公開しない
+(.gitignore 済み。validate_data.py がコミット混入を FAIL 検知)。
 
 ## 既知の注意点
 
@@ -69,7 +70,8 @@ python3 scripts/validate_data.py          # データ+HTML の整合性ゲート
   必ず yearData のリーダーボード名から辿る (全走査すると残骸に惑わされる)。
 - TrackMan CSV には東都大学リーグの試合が混在することがある。マージは必ず
   update_and_deploy.sh (バックアップ+--clean) 経由で。
-- 詳細な運用メモ・事故履歴はローカルの Claude メモリ (`statscast-deploy-workflow` 等) にある。
+- 詳細な運用メモ・事故履歴・復旧手順は `docs/OPERATIONS.md` にある (落とし穴①〜⑧)。
+- 残骸の掃除: `python3 scripts/cleanup_stale_details.py` (dry-run 既定、`--delete` で実削除)。
 
 ## 夜間エージェント (自動改善) への指針
 
