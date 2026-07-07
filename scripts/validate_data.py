@@ -12,7 +12,8 @@
   - リーダーボード上位選手の詳細ファイル実在 (姓名揺れ残骸の検出)
   - チーム傾向 (teams/) の構造
   - モデル (models/) の健全性: Stuff+平均≈100、xwOBA↔wOBAのリーグ整合、グリッド地形
-  - index.html / 404.html の参照アセット実在 + noindex 保持
+  - index.html / 404.html の参照アセット実在 + バンドルハッシュ一致 + noindex 保持
+  - 公開除外物 (batter_zones/, dates_2026.json) がコミットされていないこと
 
 使い方: python3 scripts/validate_data.py [DATA_DIR] [--skip-html]
   DATA_DIR 省略時: スクリプト位置から ../data
@@ -23,6 +24,7 @@
 import json
 import os
 import re
+import subprocess
 import sys
 
 PASS, FAIL, WARN = [], [], []
@@ -280,6 +282,40 @@ def check_html(repo_root):
             )
 
 
+EXCLUDED_FROM_REPO = ["data/players/batter_zones", "data/dates_2026.json"]
+
+
+def check_repo_exclusions(repo_root):
+    """フロント未使用のパイプライン出力が公開リポジトリに紛れ込んでいないか。
+
+    再生成やrsyncでローカルに復活するのは正常 (gitignoreがコミットだけを防ぐ)。
+    """
+    if not os.path.isdir(os.path.join(repo_root, ".git")):
+        warn("公開除外チェック", "gitリポジトリ外のためスキップ")
+        return
+    try:
+        out = subprocess.run(
+            ["git", "-C", repo_root, "ls-files", "--"] + EXCLUDED_FROM_REPO,
+            capture_output=True, text=True, check=True,
+        ).stdout
+    except Exception as e:
+        warn("公開除外チェック", f"git実行不可: {e}")
+        return
+    tracked = [l for l in out.splitlines() if l.strip()]
+    if tracked:
+        ng("公開除外物がコミットされている (git rm --cached で除去)", ", ".join(tracked))
+    else:
+        ok("公開除外物 (batter_zones/, dates_2026.json) は未コミット")
+    for rel in EXCLUDED_FROM_REPO:
+        if os.path.exists(os.path.join(repo_root, rel)):
+            ignored = subprocess.run(
+                ["git", "-C", repo_root, "check-ignore", "-q", rel],
+                capture_output=True,
+            ).returncode == 0
+            if not ignored:
+                ng(f"{rel} がローカルに存在するのに .gitignore されていない (git add -A で混入する)")
+
+
 def main():
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     skip_html = "--skip-html" in sys.argv
@@ -311,6 +347,7 @@ def main():
     check_models(data_dir)
     if not skip_html:
         check_html(repo_root)
+        check_repo_exclusions(repo_root)
 
     print("=" * 60)
     print(f"結果: {len(PASS)} passed / {len(FAIL)} FAILED / {len(WARN)} warned")
