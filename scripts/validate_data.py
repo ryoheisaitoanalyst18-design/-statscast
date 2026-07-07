@@ -247,6 +247,7 @@ def check_models(data_dir):
 
 
 def check_html(repo_root):
+    html_refs = {}
     for fn in ("index.html", "404.html"):
         path = os.path.join(repo_root, fn)
         if not os.path.exists(path):
@@ -263,6 +264,20 @@ def check_html(repo_root):
             ok(f"{fn}: noindex 保持")
         else:
             ng(f"{fn}: noindex が消えている (意図的設定 — 復元必要)")
+        html_refs[fn] = refs
+
+    # index.html と 404.html は必ず同じバンドルを参照しなければならない
+    # (404.html は SPA ディープリンクのフォールバックで同じバンドルを読む)
+    if "index.html" in html_refs and "404.html" in html_refs:
+        if html_refs["index.html"] == html_refs["404.html"]:
+            ok("index.html / 404.html バンドルハッシュ一致")
+        else:
+            only_index = html_refs["index.html"] - html_refs["404.html"]
+            only_404 = html_refs["404.html"] - html_refs["index.html"]
+            ng(
+                "index.html / 404.html バンドルハッシュ不一致",
+                f"index のみ: {sorted(only_index)}  404 のみ: {sorted(only_404)}",
+            )
 
 
 def main():
