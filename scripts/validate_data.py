@@ -456,10 +456,17 @@ def main():
     if latest_doc:
         check_player_details(data_dir, latest_doc)
 
+    # 2026年大会別ファイル (yearData_2026_{league,fresh}.json) — CLAUDE.md に記載
+    for scope in ("2026_league", "2026_fresh"):
+        check_year_data(data_dir, scope)
+
     numeric_years = [y for y in years if y != "All"]
     check_tendencies(data_dir, "All")
     if numeric_years:
         check_tendencies(data_dir, numeric_years[-1])
+    # 2026年大会別の傾向ファイル (tendencies_2026_{league,fresh}.json)
+    for scope in ("2026_league", "2026_fresh"):
+        check_tendencies(data_dir, scope)
     check_models(data_dir)
     check_competitions(data_dir)
     if not skip_html:
