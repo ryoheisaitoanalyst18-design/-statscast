@@ -170,6 +170,7 @@ def check_tendencies(data_dir, scope):
         ok(f"tendencies_{scope}: チーム構成")
     else:
         ng(f"tendencies_{scope}: チーム構成")
+        return
     t0 = d["teams"][0]
     z = d["data"][t0]["batting"]["zones"]
     if all(k in z for k in ("all", "byPitch", "R", "L")):
