@@ -177,16 +177,22 @@ def check_tendencies(data_dir, scope):
     except Exception as e:
         ng(f"tendencies_{scope}", f"パース不能: {e}")
         return
-    if set(d.get("teams", [])) <= VALID_TEAMS and len(d.get("teams", [])) >= 2:
+    teams = d.get("teams", [])
+    if set(teams) <= VALID_TEAMS and len(teams) >= 2:
         ok(f"tendencies_{scope}: チーム構成")
     else:
         ng(f"tendencies_{scope}: チーム構成")
-    t0 = d["teams"][0]
-    z = d["data"][t0]["batting"]["zones"]
-    if all(k in z for k in ("all", "byPitch", "R", "L")):
-        ok(f"tendencies_{scope}: ゾーン構造 (all/byPitch/R/L)")
-    else:
-        ng(f"tendencies_{scope}: ゾーン構造", str(list(z.keys())))
+    if not teams:
+        return
+    try:
+        t0 = teams[0]
+        z = d["data"][t0]["batting"]["zones"]
+        if all(k in z for k in ("all", "byPitch", "R", "L")):
+            ok(f"tendencies_{scope}: ゾーン構造 (all/byPitch/R/L)")
+        else:
+            ng(f"tendencies_{scope}: ゾーン構造", str(list(z.keys())))
+    except (KeyError, IndexError) as e:
+        ng(f"tendencies_{scope}: ゾーン構造 (構造アクセス失敗)", str(e))
 
 
 def check_models_meta(data_dir):
