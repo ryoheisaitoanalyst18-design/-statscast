@@ -507,6 +507,29 @@ def check_competitions_date_files(data_dir):
         ok("competitions_2026.json: 日別ファイルと日付リストが完全一致")
 
 
+def check_defense_data(data_dir):
+    """defenseData.json (守備位置・打球データ、手動系) の基本整合性チェック。"""
+    path = os.path.join(data_dir, "defenseData.json")
+    if not os.path.exists(path):
+        warn("defenseData.json", "なし")
+        return
+    try:
+        d = load(path)
+    except Exception as e:
+        ng("defenseData.json", f"パース不能: {e}")
+        return
+    if not isinstance(d, list) or len(d) == 0:
+        ng("defenseData.json", f"空またはリスト形式でない (type={type(d).__name__})")
+        return
+    ok(f"defenseData.json: {len(d)}件パース・リスト形式 OK")
+    required = {"pitchUID", "year", "pitcher", "batted", "fielders"}
+    bad = [f"#{i}" for i, r in enumerate(d[:50]) if required - set(r.keys())]
+    if not bad:
+        ok("defenseData.json: 必須キー (pitchUID/year/pitcher/batted/fielders) 実在")
+    else:
+        ng("defenseData.json: 必須キー欠落", ", ".join(bad[:3]))
+
+
 EXCLUDED_FROM_REPO = ["data/players/batter_zones", "data/dates_2026.json"]
 
 
@@ -580,6 +603,7 @@ def main():
     check_competitions(data_dir)
     check_competitions_date_files(data_dir)
     check_run_expectancy(data_dir)
+    check_defense_data(data_dir)
     if not skip_html:
         check_html(repo_root)
         check_orphaned_assets(repo_root)
