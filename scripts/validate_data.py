@@ -349,6 +349,39 @@ def check_run_expectancy(data_dir):
              f"{len(anomalous)}件: {anomalous}")
 
 
+def check_asset_chunks(repo_root, html_refs):
+    """main JS バンドルから動的 import される遅延チャンクが assets/ に実在するか (落とし穴① ⑦)。
+
+    check_html() は HTML 直参照ファイルの実在を保証するが、Vite コード分割の
+    遅延チャンク (3D コンポーネント等) は HTML に現れないため別途検査が必要。
+    欠落すると 3D 表示だけが壊れ、トップページは正常に見える事故になる。
+    """
+    main_js_set = {r for r in html_refs.get("index.html", set()) if r.endswith(".js")}
+    if not main_js_set:
+        warn("遅延チャンク確認", "index.html に main JS の参照がない")
+        return
+    main_js_rel = next(iter(main_js_set))  # "assets/index-XXXX.js"
+    main_js_path = os.path.join(repo_root, main_js_rel)
+    if not os.path.exists(main_js_path):
+        warn("遅延チャンク確認", f"{main_js_rel} が実在しない")
+        return
+
+    with open(main_js_path, encoding="utf-8", errors="ignore") as f:
+        content = f.read()
+    # Vite のチャンク命名: ComponentName-HASH8chars.js (英字始まり・8文字以上のハッシュ)
+    chunk_names = set(re.findall(r'[A-Za-z][A-Za-z0-9]*-[A-Za-z0-9_]{8,}\.js', content))
+    if not chunk_names:
+        warn("遅延チャンク確認", "チャンク参照が main JS に見つからなかった")
+        return
+
+    assets_dir = os.path.join(repo_root, "assets")
+    missing = sorted(c for c in chunk_names if not os.path.exists(os.path.join(assets_dir, c)))
+    if missing:
+        ng("遅延チャンク欠落 (3D機能が壊れる)", str(missing))
+    else:
+        ok(f"遅延チャンク {len(chunk_names)} 件すべて実在")
+
+
 def check_html(repo_root):
     html_refs = {}
     for fn in ("index.html", "404.html"):
@@ -381,6 +414,7 @@ def check_html(repo_root):
                 "index.html / 404.html バンドルハッシュ不一致",
                 f"index のみ: {sorted(only_index)}  404 のみ: {sorted(only_404)}",
             )
+    check_asset_chunks(repo_root, html_refs)
 
 
 def check_competitions(data_dir):
