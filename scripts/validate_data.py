@@ -178,8 +178,52 @@ def check_tendencies(data_dir, scope):
         ng(f"tendencies_{scope}: ゾーン構造", str(list(z.keys())))
 
 
+def check_models_meta(data_dir):
+    """models_meta.json の存在・構造・モデル品質指標を検証する。"""
+    path = os.path.join(data_dir, "models", "models_meta.json")
+    if not os.path.exists(path):
+        ng("models_meta.json", "なし")
+        return
+    try:
+        d = load(path)
+    except Exception as e:
+        ng("models_meta.json", f"パース不能: {e}")
+        return
+    for key in ("unitNormalization", "stuffPlus", "xwoba"):
+        if key not in d:
+            ng("models_meta.json", f"キー欠落: {key}")
+            return
+    ok("models_meta.json: 必須キー確認 (unitNormalization/stuffPlus/xwoba)")
+
+    # xwOBAモデルの対数損失がベースライン（定数予測）を下回ることを確認
+    ll = d["xwoba"].get("logloss", {})
+    if isinstance(ll, dict) and "model" in ll and "baseline" in ll:
+        if ll["model"] < ll["baseline"]:
+            ok(f"xwOBA logloss: モデル({ll['model']:.3f}) < ベースライン({ll['baseline']:.3f})")
+        else:
+            ng("xwOBA logloss: モデルがベースライン以上", f"{ll['model']:.3f} >= {ll['baseline']:.3f}")
+
+    # xwOBAのホールドアウト相関が正であることを確認
+    hbc = d["xwoba"].get("holdoutBatterCorr", {})
+    if isinstance(hbc, dict) and "corr" in hbc:
+        if hbc["corr"] > 0:
+            ok(f"xwOBA ホールドアウト打者相関 {hbc['corr']:.3f} > 0")
+        else:
+            ng("xwOBA ホールドアウト打者相関が0以下", f"{hbc['corr']:.3f}")
+
+    # Stuff+ スプリットハーフ信頼性係数が妥当範囲
+    sp_val = d["stuffPlus"].get("validation", {})
+    shr = sp_val.get("splitHalfReliability")
+    if shr is not None:
+        if 0 < shr <= 1:
+            ok(f"Stuff+ スプリットハーフ信頼性 {shr:.3f} ∈ (0,1]")
+        else:
+            ng("Stuff+ スプリットハーフ信頼性が範囲外", f"{shr}")
+
+
 def check_models(data_dir):
     mdir = os.path.join(data_dir, "models")
+    check_models_meta(data_dir)
     # Stuff+
     path = os.path.join(mdir, "stuffplus_All.json")
     if os.path.exists(path):
