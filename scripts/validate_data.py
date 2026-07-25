@@ -356,6 +356,47 @@ def check_competitions(data_dir):
             continue
         ok(f"{name}: 構造確認 (cutoff={inner['cutoff']}, league={len(league_dates)}日, fresh={len(fresh_dates)}日)")
 
+def check_orphaned_assets(repo_root):
+    """assets/ の到達閉包チェック: どこからも import されない孤立ファイルを WARN。
+
+    index.html / 404.html から参照される JS/CSS を起点に、JS ファイル内の
+    動的 import 参照を再帰的に辿り、到達できないファイルを検出する
+    (OPERATIONS.md ⑦「到達 closure 方式」参照)。
+    """
+    assets_dir = os.path.join(repo_root, "assets")
+    if not os.path.isdir(assets_dir):
+        return
+
+    reachable = set()
+    for html_fn in ("index.html", "404.html"):
+        html_path = os.path.join(repo_root, html_fn)
+        if not os.path.exists(html_path):
+            continue
+        html = open(html_path, encoding="utf-8").read()
+        for ref in re.findall(r'assets/([A-Za-z0-9_.-]+\.(?:js|css))', html):
+            reachable.add(ref)
+
+    to_visit = [f for f in list(reachable) if f.endswith(".js")]
+    visited = set(to_visit)
+    while to_visit:
+        fn = to_visit.pop()
+        js_path = os.path.join(assets_dir, fn)
+        if not os.path.exists(js_path):
+            continue
+        content = open(js_path, encoding="utf-8").read()
+        for ref in re.findall(r'"assets/([A-Za-z0-9_.-]+\.js)"', content):
+            reachable.add(ref)
+            if ref not in visited:
+                visited.add(ref)
+                to_visit.append(ref)
+
+    all_assets = set(os.listdir(assets_dir))
+    orphans = sorted(all_assets - reachable)
+    if orphans:
+        warn("孤立アセット候補 (OPERATIONS.md ⑦)", f"{len(orphans)}件: {orphans}")
+    else:
+        ok(f"assets/ 到達閉包: 全{len(all_assets)}ファイル到達可能")
+
 
 EXCLUDED_FROM_REPO = ["data/players/batter_zones", "data/dates_2026.json"]
 
@@ -423,6 +464,7 @@ def main():
     check_competitions(data_dir)
     if not skip_html:
         check_html(repo_root)
+        check_orphaned_assets(repo_root)
         check_repo_exclusions(repo_root)
 
     print("=" * 60)
