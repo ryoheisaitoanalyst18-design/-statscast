@@ -92,6 +92,9 @@ def check_year_data(data_dir, year):
             in_range(r.get("SLG"), 0, 4), in_range(r.get("wOBA"), 0, 2.07),
             in_range(r.get("K_pct"), 0, 100), in_range(r.get("BB_pct"), 0, 100),
             in_range(r.get("HardHit_pct"), 0, 100), in_range(r.get("Barrel_pct"), 0, 100),
+            # wRC+: leagueWOBA=0や計算失敗で無限大になるケースを検知 (全年度実測最大645)
+            in_range(r.get("wRC_plus"), 0, 1000),
+            in_range(r.get("SwSp_pct"), 0, 100), in_range(r.get("BABIP"), 0, 1),
         ]
         if not all(checks):
             bad += 1
@@ -107,6 +110,7 @@ def check_year_data(data_dir, year):
             in_range(r.get("Strike_pct"), 0, 100), in_range(r.get("CSW_pct"), 0, 100),
             in_range(r.get("Zone_pct"), 0, 100), (r.get("IP", 0) or 0) >= 0,
             r.get("H_against", 0) <= r.get("AB_against", 0) + 1e-9,
+            in_range(r.get("K_pct"), 0, 100), in_range(r.get("BB_pct"), 0, 100),
         ]
         if not all(checks):
             bad += 1
