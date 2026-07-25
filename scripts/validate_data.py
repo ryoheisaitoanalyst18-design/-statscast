@@ -143,7 +143,7 @@ def check_year_data(data_dir, year):
 
 
 def check_player_details(data_dir, year_doc):
-    """最新年度の上位打者に詳細ファイルがあるか (姓名揺れ・残骸の検出)。"""
+    """最新年度の上位打者・投手に詳細ファイルがあるか (姓名揺れ・残骸の検出)。"""
     rows = sorted(year_doc["batterLeaderboard"], key=lambda r: -r.get("PA", 0))[:30]
     missing = []
     for r in rows:
@@ -151,9 +151,20 @@ def check_player_details(data_dir, year_doc):
         if not os.path.exists(os.path.join(data_dir, "players", "batter_detail", fn)):
             missing.append(r["Name"])
     if missing:
-        ng("選手詳細ファイル欠落", f"{len(missing)}人 例: {missing[:3]}")
+        ng("打者詳細ファイル欠落", f"{len(missing)}人 例: {missing[:3]}")
     else:
-        ok(f"選手詳細ファイル: 上位{len(rows)}人分すべて実在")
+        ok(f"打者詳細ファイル: 上位{len(rows)}人分すべて実在")
+
+    rows_p = sorted(year_doc["pitcherLeaderboard"], key=lambda r: -r.get("TotalPitches", 0))[:30]
+    missing_p = []
+    for r in rows_p:
+        fn = r["Name"].replace("/", "_").replace("\\", "_") + ".json"
+        if not os.path.exists(os.path.join(data_dir, "players", "pitcher_detail", fn)):
+            missing_p.append(r["Name"])
+    if missing_p:
+        ng("投手詳細ファイル欠落", f"{len(missing_p)}人 例: {missing_p[:3]}")
+    else:
+        ok(f"投手詳細ファイル: 上位{len(rows_p)}人分すべて実在")
 
 
 def check_tendencies(data_dir, scope):
