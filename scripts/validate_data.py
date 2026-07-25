@@ -326,6 +326,37 @@ def check_html(repo_root):
             )
 
 
+def check_competitions(data_dir):
+    """competitions_YYYY.json の存在・tRPCラップ構造・大会区分キーを検証する。"""
+    import glob as _glob
+    files = sorted(_glob.glob(os.path.join(data_dir, "competitions_*.json")))
+    if not files:
+        warn("competitions_*.json", "なし")
+        return
+    for path in files:
+        name = os.path.basename(path)
+        try:
+            d = load(path)
+        except Exception as e:
+            ng(name, f"パース不能: {e}")
+            continue
+        try:
+            inner = unwrap(d)
+        except Exception as e:
+            ng(name, f"tRPCアンラップ失敗: {e}")
+            continue
+        missing = [k for k in ("cutoff", "league", "fresh") if k not in inner]
+        if missing:
+            ng(name, f"キー欠落: {missing}")
+            continue
+        league_dates = inner["league"].get("dates", [])
+        fresh_dates = inner["fresh"].get("dates", [])
+        if not league_dates or not fresh_dates:
+            ng(name, f"dates が空 (league={len(league_dates)}, fresh={len(fresh_dates)})")
+            continue
+        ok(f"{name}: 構造確認 (cutoff={inner['cutoff']}, league={len(league_dates)}日, fresh={len(fresh_dates)}日)")
+
+
 EXCLUDED_FROM_REPO = ["data/players/batter_zones", "data/dates_2026.json"]
 
 
@@ -389,6 +420,7 @@ def main():
     if numeric_years:
         check_tendencies(data_dir, numeric_years[-1])
     check_models(data_dir)
+    check_competitions(data_dir)
     if not skip_html:
         check_html(repo_root)
         check_repo_exclusions(repo_root)

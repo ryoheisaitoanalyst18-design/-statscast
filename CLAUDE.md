@@ -54,6 +54,7 @@ python3 scripts/validate_data.py          # データ+HTML の整合性ゲート
 | `yearData_{year}.json` | 年度別リーダーボード+チーム集計 | tRPCラップ (`[{result:{data:{json:…}}}]`) |
 | `yearData_2026_{league,fresh}.json` | 2026大会別 (cutoff 6/2) | tRPCラップ |
 | `yearData_2026_YYYY-MM-DD.json` | 日別 (日付フィルタで使用中、消さない) | tRPCラップ |
+| `competitions_2026.json` | 2026年の大会区分定義 (cutoff日付・リーグ戦日程・フレッシュ日程) | tRPCラップ |
 | `players/{batter,pitcher}_detail/` | 選手詳細 (名前.json) | 生JSON |
 | `teams/tendencies_{scope}.json` | チーム傾向 (ゾーン/カウント/強み弱み) | 生JSON |
 | `models/stuffplus_{scope}.json` | Stuff+ リーダーボード | 生JSON |
