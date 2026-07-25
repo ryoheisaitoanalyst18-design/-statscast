@@ -309,6 +309,46 @@ def check_models(data_dir):
             ng("グリッド地形が平坦", f"強打帯{hi:.2f} vs 弱打帯{lo:.2f}")
 
 
+def check_run_expectancy(data_dir):
+    """カウント×アウト数のRun Expectancy行列 (36状態) の構造健全性を確認する。
+
+    ボール 0-3 × ストライク 0-2 × アウト 0-2 の標準36状態すべてが存在するかを確認し、
+    想定外のキー（負値を含む外れ値行 等）を WARN で報告する。
+    """
+    path = os.path.join(data_dir, "run_expectancy.json")
+    if not os.path.exists(path):
+        warn("run_expectancy.json", "なし")
+        return
+    try:
+        d = load(path)
+    except Exception as e:
+        ng("run_expectancy.json", f"パース不能: {e}")
+        return
+
+    states = d.get("states", {})
+    if not states:
+        ng("run_expectancy.json", "states キーなし")
+        return
+
+    expected = {f"{b}-{s}-{o}" for b in range(4) for s in range(3) for o in range(3)}
+    missing = expected - set(states.keys())
+    if missing:
+        ng("run_expectancy.json: 標準36状態に欠落", f"{len(missing)}件 例: {sorted(missing)[:3]}")
+    else:
+        ok("run_expectancy.json: 標準36カウント×アウト状態すべて実在")
+
+    bad_re = [k for k, v in states.items() if not (0 <= v.get("re", 0) <= 3.0)]
+    if bad_re:
+        ng("run_expectancy.json: RE値域外 [0,3]", str(bad_re[:3]))
+    else:
+        ok("run_expectancy.json: RE値域 [0, 3]")
+
+    anomalous = sorted(k for k in states.keys() if k not in expected)
+    if anomalous:
+        warn("run_expectancy.json: 想定外の状態キー (ソース CSV の外れ値行と推定。パイプライン側で要確認)",
+             f"{len(anomalous)}件: {anomalous}")
+
+
 def check_html(repo_root):
     html_refs = {}
     for fn in ("index.html", "404.html"):
@@ -539,6 +579,7 @@ def main():
     check_models(data_dir)
     check_competitions(data_dir)
     check_competitions_date_files(data_dir)
+    check_run_expectancy(data_dir)
     if not skip_html:
         check_html(repo_root)
         check_orphaned_assets(repo_root)
