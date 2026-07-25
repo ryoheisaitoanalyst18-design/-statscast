@@ -367,6 +367,7 @@ def check_competitions(data_dir):
             continue
         ok(f"{name}: 構造確認 (cutoff={inner['cutoff']}, league={len(league_dates)}日, fresh={len(fresh_dates)}日)")
 
+
 def check_orphaned_assets(repo_root):
     """assets/ の到達閉包チェック: どこからも import されない孤立ファイルを WARN。
 
@@ -407,6 +408,57 @@ def check_orphaned_assets(repo_root):
         warn("孤立アセット候補 (OPERATIONS.md ⑦)", f"{len(orphans)}件: {orphans}")
     else:
         ok(f"assets/ 到達閉包: 全{len(all_assets)}ファイル到達可能")
+
+
+def check_competitions_date_files(data_dir):
+    """competitions_2026.json の日付リストと yearData 日別ファイルの双方向整合チェック。
+
+    - competitions_2026.json に列挙された各日付に対応する yearData_2026_YYYY-MM-DD.json が存在するか
+    - 逆に、data/ にある yearData_2026_YYYY-MM-DD.json が competitions_2026.json に未記載でないか
+    """
+    path = os.path.join(data_dir, "competitions_2026.json")
+    if not os.path.exists(path):
+        warn("competitions_2026.json", "なし (2026シーズンデータ未反映?)")
+        return
+    try:
+        d = unwrap(load(path))
+    except Exception as e:
+        ng("competitions_2026.json", f"パース不能: {e}")
+        return
+
+    groups = {k: v for k, v in d.items() if k != "cutoff"}
+    if not groups:
+        ng("competitions_2026.json", "大会グループが空")
+        return
+
+    listed_dates = []
+    for key, grp in groups.items():
+        if "label" not in grp or "dates" not in grp:
+            ng("competitions_2026.json", f"グループ '{key}' に label/dates がない")
+            return
+        listed_dates.extend(grp["dates"])
+
+    missing_files = [
+        dt for dt in listed_dates
+        if not os.path.exists(os.path.join(data_dir, f"yearData_2026_{dt}.json"))
+    ]
+    if missing_files:
+        ng("competitions_2026.json: 対応 yearData ファイル欠落",
+           f"{len(missing_files)}件 例: {missing_files[:3]}")
+    else:
+        ok(f"competitions_2026.json: {len(groups)}大会/{len(listed_dates)}日分の yearData すべて実在")
+
+    actual_dates = {
+        f.replace("yearData_2026_", "").replace(".json", "")
+        for f in os.listdir(data_dir)
+        if f.startswith("yearData_2026_2026") and f.endswith(".json")
+    }
+    unlisted = sorted(actual_dates - set(listed_dates))
+    if unlisted:
+        ng("competitions_2026.json 未記載の yearData 日別ファイルあり",
+           f"{len(unlisted)}件 例: {unlisted[:3]}")
+    else:
+        ok("competitions_2026.json: 日別ファイルと日付リストが完全一致")
 
 
 EXCLUDED_FROM_REPO = ["data/players/batter_zones", "data/dates_2026.json"]
@@ -480,6 +532,7 @@ def main():
         check_tendencies(data_dir, scope)
     check_models(data_dir)
     check_competitions(data_dir)
+    check_competitions_date_files(data_dir)
     if not skip_html:
         check_html(repo_root)
         check_orphaned_assets(repo_root)
