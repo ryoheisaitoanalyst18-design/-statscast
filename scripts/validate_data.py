@@ -111,6 +111,8 @@ def check_year_data(data_dir, year):
             in_range(r.get("Zone_pct"), 0, 100), (r.get("IP", 0) or 0) >= 0,
             r.get("H_against", 0) <= r.get("AB_against", 0) + 1e-9,
             in_range(r.get("K_pct"), 0, 100), in_range(r.get("BB_pct"), 0, 100),
+            # 回転効率は 0-100% (100超は物理的にあり得ない → パイプライン側で丸め/棄却済み)
+            in_range(r.get("AvgSpinEff"), 0, 100),
         ]
         if not all(checks):
             bad += 1
@@ -129,6 +131,17 @@ def check_year_data(data_dir, year):
             ok(f"{name}: Zone%中央値 {zmed:.1f}")
         else:
             ng(f"{name}: Zone%中央値異常", f"{zmed:.1f} (期待30-60)")
+
+    # 回転効率の回帰チェック: 空気密度・Cl(S)・単位換算のいずれかが壊れると
+    # 分布ごと平行移動する (全球100%張り付き / 一桁% など)。全球種混合の中央値は 60-70% 前後。
+    sq = [r["AvgSpinEff"] for r in d["pitcherLeaderboard"]
+          if r.get("TotalPitches", 0) >= 200 and r.get("AvgSpinEff") is not None]
+    if len(sq) >= 5:
+        smed = sorted(sq)[len(sq) // 2]
+        if 40 <= smed <= 90:
+            ok(f"{name}: 回転効率中央値 {smed:.1f}%")
+        else:
+            ng(f"{name}: 回転効率中央値異常", f"{smed:.1f}% (期待40-90)")
 
     teams = {t.get("Team") for t in d["teamBatting"]}
     if teams <= VALID_TEAMS and len(teams) >= 2:
