@@ -212,6 +212,51 @@ def check_tendencies(data_dir, scope):
         ng(f"tendencies_{scope}: ゾーン構造 (構造アクセス失敗)", str(e))
 
 
+def check_stuffplus_scope(data_dir, scope):
+    """スコープ別 Stuff+ ファイルの存在・パース・値域チェック (加重平均≈100は全体のみ)。"""
+    path = os.path.join(data_dir, "models", f"stuffplus_{scope}.json")
+    if not os.path.exists(path):
+        warn(f"stuffplus_{scope}.json", "なし")
+        return
+    try:
+        d = load(path)
+    except Exception as e:
+        ng(f"stuffplus_{scope}.json", f"パース不能: {e}")
+        return
+    rows = d.get("rows", [])
+    if not rows:
+        warn(f"stuffplus_{scope}.json", "rows が空")
+        return
+    out_of_range = [r for r in rows if not (40 <= r.get("stuff", -1) <= 180)]
+    if out_of_range:
+        ng(f"stuffplus_{scope}.json: Stuff+ 値域外", f"{len(out_of_range)}行")
+    else:
+        ok(f"stuffplus_{scope}.json: 値域 [40,180] ({len(rows)}行)")
+
+
+def check_xwoba_scope(data_dir, scope):
+    """スコープ別 xwOBA ファイルの存在・パース・diff 整合チェック。"""
+    path = os.path.join(data_dir, "models", f"xwoba_{scope}.json")
+    if not os.path.exists(path):
+        warn(f"xwoba_{scope}.json", "なし")
+        return
+    try:
+        d = load(path)
+    except Exception as e:
+        ng(f"xwoba_{scope}.json", f"パース不能: {e}")
+        return
+    bats = d.get("batters", [])
+    if not bats:
+        warn(f"xwoba_{scope}.json", "batters が空")
+        return
+    bad = [r for r in bats
+           if abs((r.get("wOBA", 0) - r.get("xwOBA", 0)) - r.get("diff", 0)) > 0.0015]
+    if bad:
+        ng(f"xwoba_{scope}.json: diff列が wOBA-xwOBA と不一致", f"{len(bad)}行")
+    else:
+        ok(f"xwoba_{scope}.json: diff 整合 ({len(bats)}打者)")
+
+
 def check_models_meta(data_dir):
     """models_meta.json の存在・構造・モデル品質指標を検証する。"""
     path = os.path.join(data_dir, "models", "models_meta.json")
@@ -324,6 +369,10 @@ def check_models(data_dir):
             ok(f"グリッド地形 (強打帯{hi:.2f} > 弱打帯{lo:.2f})")
         else:
             ng("グリッド地形が平坦", f"強打帯{hi:.2f} vs 弱打帯{lo:.2f}")
+    # 2026年大会別スコープのモデル健全性 (tendencies と対称にチェック)
+    for scope in ("2026_league", "2026_fresh"):
+        check_stuffplus_scope(data_dir, scope)
+        check_xwoba_scope(data_dir, scope)
 
 
 def check_run_expectancy(data_dir):
