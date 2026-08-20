@@ -13,6 +13,10 @@
 # OS / editor cruft
 .DS_Store
 
+# Python バイトコード (デプロイスクリプトが scripts/ を丸ごと git add するので必須)
+__pycache__/
+*.pyc
+
 # Pipeline output not used by the frontend (loader exists but no component calls it)
 data/players/batter_zones/
 data/dates_2026.json

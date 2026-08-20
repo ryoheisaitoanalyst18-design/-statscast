@@ -126,3 +126,40 @@ python3 scripts/cleanup_stale_details.py [DATA_DIR] --delete   # 実削除 (前�
 新しい試合 CSV の投入や球種修正後の再生成はパイプライン側リポジトリの仕事。
 このリポジトリ側では必ず update_and_deploy.sh を使う (バックアップ・東都混在チェック・
 検証ゲート込み)。data/ の JSON を手で直さない — 直すのはパイプライン、ここは成果物置き場。
+
+### 試合動画の紐づけ (新しい試合を追加するとき)
+
+球のポップアップから YouTube の試合動画に飛ぶ機能。動画は**限定公開**でアップロードし、
+動画IDだけを公開データに載せる (動画実体はこのリポジトリに入れない)。
+
+```bash
+# 0. 前提: Watson1 (~/diamondlab) 側でイニング別クリップに球をタグ付け済みであること
+python3 scripts/video/concat_game_video.py --dry-run     # 構成と尺の確認
+python3 scripts/video/concat_game_video.py               # 連結 → ~/.diamondlab/videos/upload/
+# 1. (任意) TrackMan データを映像に焼き込む
+python3 scripts/video/make_overlay.py --game-uid <UID> --duration 300   # まず試し焼き
+python3 scripts/video/make_overlay.py --game-uid <UID>                  # 全編 (約24分/試合)
+# 2. {試合UID}.mp4 (焼き込むなら {試合UID}_overlay.mp4) を YouTube に「限定公開」でアップロード
+# 3. 動画IDを scripts/video/youtube_ids.json に記入
+python3 scripts/video/export_video_links.py              # → data/videos/links.json
+./update_and_deploy.sh --data-only
+```
+
+**焼き込み版は元の連結動画と尺・タイムラインが完全に同一** (トリムせず再エンコードするだけ)。
+`links.json` の再生位置はそのまま使えるので、焼き込み版を上げればサイトからのジャンプ先も
+データ付き映像になる。プレーン版を別に上げる必要はない。
+**ただし `--start` / `--duration` を付けた出力は先頭がズレる**ので、試し焼き用と割り切ること。
+
+落とし穴:
+
+- **1試合1本に連結してからアップする**。Watson1 の紐づけはイニット別クリップ単位だが、
+  17本を個別にアップすると動画IDの収集が現実的でない。連結マニフェストが
+  「クリップ内秒数 → 通し秒数」の変換を持つので、連結を挟まないと再生位置が出せない。
+- **1試合100分超**。YouTube の15分制限を外すにはアカウントの電話番号確認が必要。
+- **鍵は TrackMan の生値そのもの** (`日付|投手|投球位置` と `日付|打球速度|角度|飛距離`)。
+  公開JSONに GameUID も PitchNo も無いための方式で、パイプラインが単位換算や丸めを
+  変えると**無言で全滅する**。検証ゲートが実データ照合で到達率を見ているので、
+  `videos/links.json: 球キーが公開データに当たらない` が出たら export を再実行する。
+- **`direction` を鍵に使わない**。公開側で座標変換されていて Watson1 の値と一致しない
+  (`ev`/`la`/`distance` は生値が素通りしている)。
+- `data/videos/` は rsync の `--delete` 対象外なので、データ再生成では消えない。

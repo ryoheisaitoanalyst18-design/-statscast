@@ -10,6 +10,7 @@
   - 打者/投手指標の不変条件 (AVG≤1, H≤AB, AB≤PA, K≤PA, TB≥H, %は0-100 等)
   - リーグ全体のwOBAが常識的範囲
   - リーダーボード上位選手の詳細ファイル実在 (姓名揺れ残骸の検出)
+  - 結果球 (resultPitches) の構造・カウント値域・打席数整合
   - チーム傾向 (teams/) の構造
   - モデル (models/) の健全性: Stuff+平均≈100、xwOBA↔wOBAのリーグ整合、グリッド地形
   - index.html / 404.html の参照アセット実在 + バンドルハッシュ一致 + noindex 保持
@@ -22,6 +23,7 @@
 終了コード: 0=全PASS, 1=FAILあり
 """
 import json
+import math
 import os
 import re
 import subprocess
@@ -182,6 +184,83 @@ def check_player_details(data_dir, year_doc):
         ng("投手詳細ファイル欠落", f"{len(missing_p)}人 例: {missing_p[:3]}")
     else:
         ok(f"投手詳細ファイル: 上位{len(rows_p)}人分すべて実在")
+
+
+RESULT_CATS = {"1B", "2B", "3B", "HR", "out", "K_swing", "K_look", "BB", "HBP", "sac"}
+RESULT_CONTACT_CATS = {"1B", "2B", "3B", "HR", "out", "sac"}
+
+
+def check_result_pitches(data_dir, year_doc):
+    """選手詳細の resultPitches (結果球 = 打席を決着させた1球) の構造と整合。
+
+    フロントの「結果球の分析」「2ストライク後の成績」がこの1配列に乗っているので、
+    ここが静かに壊れると両方のビューが同時に空になる。
+      - 結果球の数 ≧ 当年のPA/TBF (詳細は全年度分、リーダーボードは当年のみ)
+      - 結果カテゴリ・コースが定義域内
+      - strikes==2 の部分集合が存在する (2ストライク後ビューの回帰検知)
+      - ev (打球速度) は打球になった球にだけ付く
+
+    カウント (balls 0-3 / strikes 0-2) の域外は**元CSVに実在する**ため WARN 止まり
+    (2026-08 時点で全12万球中14球: 3-3 や 0--1。TrackMan 側の記録ミスで、
+     多くは三振行に投球後のカウントが入っている)。率が跳ねたら定義破壊なので FAIL。
+    """
+    targets = []
+    for r in sorted(year_doc.get("batterLeaderboard", []), key=lambda r: -r.get("PA", 0))[:10]:
+        fn = r["Name"].replace("/", "_").replace("\\", "_") + ".json"
+        targets.append(("打者", r["Name"], os.path.join(data_dir, "players", "batter_detail", fn), r.get("PA")))
+    for r in sorted(year_doc.get("pitcherLeaderboard", []), key=lambda r: -r.get("TotalPitches", 0))[:10]:
+        fn = r["Name"].replace("/", "_").replace("\\", "_") + ".json"
+        targets.append(("投手", r["Name"], os.path.join(data_dir, "players", "pitcher_detail", fn), r.get("TBF")))
+
+    checked = two_strike_total = total_pitches = 0
+    problems, odd_counts = [], []
+    for kind, name, path, min_pa in targets:
+        if not os.path.exists(path):
+            continue  # ファイル実在は check_player_details の担当
+        try:
+            d = load(path)
+        except Exception as e:
+            problems.append(f"{kind}{name}: パース不能 ({e})")
+            continue
+        rp = d.get("resultPitches")
+        if not isinstance(rp, list) or not rp:
+            problems.append(f"{kind}{name}: resultPitches が無い/空")
+            continue
+        checked += 1
+        total_pitches += len(rp)
+        two_strike_total += sum(1 for p in rp if p.get("strikes") == 2)
+        if min_pa and len(rp) < min_pa:
+            problems.append(f"{kind}{name}: 結果球{len(rp)} < 当年の打席{min_pa}")
+        for p in rp:
+            if p.get("strikes") not in (0, 1, 2, None) or p.get("balls") not in (0, 1, 2, 3, None):
+                odd_counts.append(f"{kind}{name} {p.get('balls')}-{p.get('strikes')}")
+            if p.get("cat") not in RESULT_CATS:
+                problems.append(f"{kind}{name}: 未知の結果カテゴリ {p.get('cat')!r}"); break
+            if not in_range(p.get("px"), -3, 3) or not in_range(p.get("pz"), -1, 5):
+                problems.append(f"{kind}{name}: コース値域外 {p.get('px')}/{p.get('pz')}"); break
+            if p.get("ev") is not None and p.get("cat") not in RESULT_CONTACT_CATS:
+                problems.append(f"{kind}{name}: 打球でないのに ev がある ({p.get('cat')})"); break
+
+    odd_rate = (len(odd_counts) / total_pitches * 100) if total_pitches else 0.0
+    if checked == 0:
+        ng("結果球 (resultPitches)", "上位選手の詳細に1件も無い — パイプライン未再生成?")
+        return
+    if problems:
+        ng(f"結果球 (resultPitches): {len(problems)}件の不整合", " / ".join(problems[:3]))
+        return
+    if two_strike_total == 0:
+        ng("結果球 (resultPitches)", "strikes==2 が1球も無い — 2ストライク後ビューが空になる")
+        return
+    if odd_rate > 1.0:
+        ng(f"結果球: カウント域外が {odd_rate:.1f}% ({len(odd_counts)}球)",
+           "元CSVの散発ミスでは説明できない量 — カウントの取り方が壊れていないか確認"
+           f" 例: {', '.join(odd_counts[:3])}")
+        return
+    if odd_counts:
+        warn(f"結果球: カウント域外 {len(odd_counts)}球 ({odd_rate:.2f}%)",
+             f"元CSVに実在する記録ミス (既知)。例: {', '.join(odd_counts[:3])}")
+    ok(f"結果球 (resultPitches): 上位{checked}人 {total_pitches}球の構造・打席数整合 "
+       f"(うち2ストライク {two_strike_total}球)")
 
 
 def check_tendencies(data_dir, scope):
@@ -581,6 +660,102 @@ def check_defense_data(data_dir):
         ng("defenseData.json: 必須キー欠落", ", ".join(bad[:3]))
 
 
+YOUTUBE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
+
+
+def check_video_links(data_dir):
+    """videos/links.json (球↔試合動画の紐づけ) の構造と参照整合。
+
+    このファイルは任意機能なので、無いこと自体は正常 (パイプライン出力側には常に無い)。
+    肝は「鍵が公開データに当たり続けているか」。パイプラインの単位換算などが変わると
+    値そのものを鍵にしている都合で無言で全滅するため、実データ照合まで行う。
+    """
+    path = os.path.join(data_dir, "videos", "links.json")
+    if not os.path.exists(path):
+        ok("動画紐づけ: 未配置 (任意機能)")
+        return
+    try:
+        d = load(path)
+    except Exception as e:
+        ng("videos/links.json", f"パース不能: {e}")
+        return
+
+    games = d.get("games")
+    pitches = d.get("pitches")
+    batted = d.get("batted")
+    if not isinstance(games, list) or not games or not isinstance(pitches, dict):
+        ng("videos/links.json", "games(非空リスト)/pitches(辞書) の形式でない")
+        return
+    if not isinstance(batted, dict):
+        ng("videos/links.json", "batted が辞書でない")
+        return
+
+    for i, g in enumerate(games):
+        missing = {"uid", "date", "away", "home", "youtubeId", "duration"} - set(g)
+        if missing:
+            ng(f"videos/links.json games[{i}] 必須キー欠落", ", ".join(sorted(missing)))
+            return
+        if "PLACEHOLDER" in str(g["youtubeId"]):
+            ng("videos/links.json: PLACEHOLDER の動画IDが残っている",
+               f"{g['uid']} — export_video_links.py を --placeholder 無しで再実行")
+            return
+        if not YOUTUBE_ID_RE.match(str(g["youtubeId"])):
+            ng("videos/links.json: YouTube動画IDの形式が不正",
+               f"{g['uid']} → {g['youtubeId']!r} (英数と-_の11文字)")
+            return
+    ok(f"videos/links.json: 試合 {len(games)}件・動画ID形式 OK")
+
+    for label, table in (("pitches", pitches), ("batted", batted)):
+        for k, v in table.items():
+            if (not isinstance(v, list) or len(v) != 2
+                    or not isinstance(v[0], int) or not isinstance(v[1], (int, float))):
+                ng(f"videos/links.json {label} の値形式", f"{k} → {v!r}")
+                return
+            gi, t = v
+            if not 0 <= gi < len(games):
+                ng(f"videos/links.json {label} の試合index範囲外", f"{k} → {gi}")
+                return
+            if not 0 <= t <= games[gi]["duration"]:
+                ng(f"videos/links.json {label} の再生位置が動画尺の外",
+                   f"{k} → {t}s (尺 {games[gi]['duration']}s)")
+                return
+    ok(f"videos/links.json: 球 {len(pitches)}件・打球 {len(batted)}件の参照整合 OK")
+
+    # 実データ照合: 鍵から投手名を取り出し、その投手詳細で引けるか確かめる
+    detail_dir = os.path.join(data_dir, "players", "pitcher_detail")
+    if not os.path.isdir(detail_dir):
+        return
+    by_pitcher = {}
+    for k in pitches:
+        parts = k.split("|")
+        if len(parts) == 4:
+            by_pitcher.setdefault(parts[1], set()).add(k)
+    reached = total = 0
+    for pitcher, keys in by_pitcher.items():
+        total += len(keys)
+        f = os.path.join(detail_dir, f"{pitcher}.json")
+        if not os.path.exists(f):
+            continue
+        try:
+            doc = load(f)
+        except Exception:
+            continue
+        for p in doc.get("pitches", []):
+            if p.get("px") is None or p.get("pz") is None:
+                continue
+            k = (f"{p.get('gameDate')}|{pitcher}"
+                 f"|{math.floor(p['px'] * 1000 + 0.5)}|{math.floor(p['pz'] * 1000 + 0.5)}")
+            if k in keys:
+                reached += 1
+    rate = reached / total if total else 0
+    if rate >= 0.9:
+        ok(f"videos/links.json: 球キーの {reached}/{total} ({rate:.1%}) が投手詳細から到達可能")
+    else:
+        ng("videos/links.json: 球キーが公開データに当たらない",
+           f"{reached}/{total} ({rate:.1%})。パイプラインの値が変わった可能性 "
+           f"— export_video_links.py を再実行して再デプロイ")
+
+
 EXCLUDED_FROM_REPO = ["data/players/batter_zones", "data/dates_2026.json"]
 
 
@@ -638,6 +813,7 @@ def main():
             latest_doc = doc
     if latest_doc:
         check_player_details(data_dir, latest_doc)
+        check_result_pitches(data_dir, latest_doc)
 
     # 2026年大会別ファイル (yearData_2026_{league,fresh}.json) — CLAUDE.md に記載
     for scope in ("2026_league", "2026_fresh"):
@@ -655,6 +831,7 @@ def main():
     check_competitions_date_files(data_dir)
     check_run_expectancy(data_dir)
     check_defense_data(data_dir)
+    check_video_links(data_dir)
     if not skip_html:
         check_html(repo_root)
         check_orphaned_assets(repo_root)

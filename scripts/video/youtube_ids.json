@@ -1,0 +1,8 @@
+{
+  "_使い方": "concat_game_video.py が作った ~/.diamondlab/videos/upload/{試合UID}.mp4 を YouTube に「限定公開」でアップロードし、動画URL末尾の11文字のIDをここに記入する。例: https://youtu.be/dQw4w9WgXcQ → \"dQw4w9WgXcQ\"。記入後 export_video_links.py を実行するとサイトに反映される。",
+  "_注意": "1試合が100分超のため、15分制限を外すには YouTube アカウントの電話番号確認が必要。",
+  "_未記入の試合": "IDが空の試合は links.json に出力されない (押しても再生できないボタンが出るのを防ぐため)。",
+
+  "20260516-JinguStadium-2": "",
+  "20260524-JinguStadium-2": ""
+}

@@ -35,6 +35,16 @@ python3 scripts/validate_data.py          # データ+HTML の整合性ゲート
 - 指標の不変条件 / リーグwOBA / 選手詳細ファイル実在 / モデル健全性 / HTML参照アセット / noindex
 - デプロイスクリプトが自動実行するが、単体でも動く。**FAIL があるのに push しない**。
 
+## 試合データの取込 (通常はこれだけ)
+
+```bash
+./ingest.sh    # → http://127.0.0.1:8787 をブラウザで開き、CSV/zip をドロップするだけ
+```
+
+zip 展開 → 中の CSV を列の和集合で 1 本に結合 (列ズレ破損行を作らない) → 下の
+`update_and_deploy.sh <csv> --clean` を実行し、進捗ログをブラウザに流す。
+localhost からのみ受信。アップロード原本は `~/statscast_inbox/<日時>/` に残る。
+
 ## デプロイ
 
 ```bash
@@ -55,12 +65,13 @@ python3 scripts/validate_data.py          # データ+HTML の整合性ゲート
 | `yearData_2026_{league,fresh}.json` | 2026大会別 (cutoff 6/2) | tRPCラップ |
 | `yearData_2026_YYYY-MM-DD.json` | 日別 (日付フィルタで使用中、消さない) | tRPCラップ |
 | `competitions_2026.json` | 2026年の大会区分定義 (cutoff日付・リーグ戦日程・フレッシュ日程) | tRPCラップ |
-| `players/{batter,pitcher}_detail/` | 選手詳細 (名前.json) | 生JSON |
+| `players/{batter,pitcher}_detail/` | 選手詳細 (名前.json)。`resultPitches` = 結果球 (打席を決着させた1球。2ストライク後ビューはその strikes==2 部分集合) | 生JSON |
 | `teams/tendencies_{scope}.json` | チーム傾向 (ゾーン/カウント/強み弱み) | 生JSON |
 | `models/stuffplus_{scope}.json` | Stuff+ リーダーボード | 生JSON |
 | `models/xwoba_{scope}.json` | xwOBA/xBA/xSLG (batters+pitchers) | 生JSON |
 | `models/xwoba_grid.json` / `models_meta.json` | ランドスケープ / 方法論・検証値 | 生JSON |
 | `run_expectancy.json` / `defenseData.json` | RE行列 / 守備 (手動系、消さない) | — |
+| `videos/links.json` | 球↔試合動画 (YouTube限定公開) の紐づけ。任意・無くても動く | 生JSON |
 
 `players/batter_zones/` と `dates_2026.json` はフロント未使用のため公開しない
 (.gitignore 済み。validate_data.py がコミット混入を FAIL 検知)。
@@ -73,6 +84,9 @@ python3 scripts/validate_data.py          # データ+HTML の整合性ゲート
   update_and_deploy.sh (バックアップ+--clean) 経由で。
 - 詳細な運用メモ・事故履歴・復旧手順は `docs/OPERATIONS.md` にある (落とし穴①〜⑧)。
 - 残骸の掃除: `python3 scripts/cleanup_stale_details.py` (dry-run 既定、`--delete` で実削除)。
+- 試合動画の紐づけ (`scripts/video/`) は Watson1 のタグ付け結果が入力。手順と落とし穴は
+  `docs/OPERATIONS.md` の「試合動画の紐づけ」を読むこと。**動画実体はこのリポジトリに置かない**
+  (YouTube 限定公開に上げて動画IDだけ載せる)。
 
 ## 夜間エージェント (自動改善) への指針
 
