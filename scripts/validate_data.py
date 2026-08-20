@@ -97,6 +97,11 @@ def check_year_data(data_dir, year):
             # wRC+: leagueWOBA=0や計算失敗で無限大になるケースを検知 (全年度実測最大645)
             in_range(r.get("wRC_plus"), 0, 1000),
             in_range(r.get("SwSp_pct"), 0, 100), in_range(r.get("BABIP"), 0, 1),
+            # PA = AB + BB + HBP + SAC (行単位フラグが排他である証明)。
+            # 3ボールからの死球で is_bb と is_hbp が同時に立っていた頃は All集計の
+            # 33選手で1だけ崩れ、OBP/wOBAの分子が二重計上されていた (2026-08 修正)。
+            round(r.get("AB", 0) + r.get("BB", 0) + r.get("HBP", 0) + r.get("SAC", 0))
+            == round(r.get("PA", 0)),
         ]
         if not all(checks):
             bad += 1
