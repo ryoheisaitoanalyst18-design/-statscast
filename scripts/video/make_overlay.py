@@ -274,6 +274,14 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     return "\n".join(lines) + "\n"
 
 
+def verify_mp4(ffmpeg: str, path: str) -> bool:
+    """mp4 として最後まで書き切れているか。入力を開くだけでデコードはしない。"""
+    if not os.path.exists(path) or os.path.getsize(path) == 0:
+        return False
+    r = subprocess.run([ffmpeg, "-i", path], capture_output=True, text=True)
+    return "moov atom not found" not in r.stderr
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         description=__doc__,
@@ -284,6 +292,13 @@ def main() -> int:
     ap.add_argument("--out", help="出力先 (省略で {UID}_overlay.mp4)")
     ap.add_argument("--ass-only", action="store_true", help="ASSだけ作る")
     ap.add_argument("--crf", type=int, default=21, help="x264 CRF (小さいほど高画質)")
+    # x264 は 12 スレッドまでスケールしない。2試合を6スレッドずつ並列で回した方が
+    # 1試合を12スレッドで回すより速い (実測 5.1x → 合計 6.6x)。batch_burn.py 用。
+    ap.add_argument("--threads", type=int, help="x264 のスレッド数 (省略で自動)")
+    # DVD を rip_dvd.py で無劣化コピーすると 720x480 インターレースのまま入る。
+    # ここで解除すれば再エンコードは1回で済む (HandBrake で解除すると2回になる)。
+    ap.add_argument("--deinterlace", action="store_true",
+                    help="インターレース解除 (rip_dvd.py で取り込んだ素材に必要)")
     args = ap.parse_args()
 
     import json
@@ -337,16 +352,30 @@ def main() -> int:
     if args.duration:
         cmd += ["-t", str(args.duration)]
     cmd += [
-        "-vf", (f"scale={OUT_W}:{OUT_H}:flags=lanczos,"
-                f"ass={ass_path}:fontsdir={fontsdir}"),
+        # 解除 → 拡大 → 字幕 の順。解除を拡大より先にしないと、
+        # 引き伸ばした後の縞を追うことになって精度が落ちる。
+        "-vf", ((("yadif=deint=interlaced," if args.deinterlace else "")
+                 + f"scale={OUT_W}:{OUT_H}:flags=lanczos,"
+                 + f"ass={ass_path}:fontsdir={fontsdir}")),
         "-c:v", "libx264", "-preset", "veryfast", "-crf", str(args.crf),
-        "-pix_fmt", "yuv420p", "-c:a", "copy", "-movflags", "+faststart", out,
+        "-pix_fmt", "yuv420p", "-c:a", "copy", "-movflags", "+faststart",
     ]
+    if args.threads:
+        cmd += ["-threads", str(args.threads)]
+    cmd += [out]
     print(f"  焼き込み中 → {out}")
     r = subprocess.run(cmd, capture_output=True, text=True)
     if r.returncode != 0:
         print("  ✗ ffmpeg 失敗:")
         print("    " + "\n    ".join(r.stderr.strip().splitlines()[-12:]))
+        return 1
+    # 焼き込みが途中で死んでも「それらしい大きさ」のファイルは残る。mp4 の目次
+    # (moov atom) は ffmpeg が最後に書くので、欠けていれば未完成と判る。
+    # 未完成ファイルをローカルのプレイヤーは再生できてしまうことがあり、
+    # YouTube に上げて初めて「処理を中止しました」で気づくことになる。
+    if not verify_mp4(ff, out):
+        print("  ✗ 出力が未完成 (moov atom が無い)。焼き込みが途中で終わっている。")
+        print("    このファイルはアップロードできない。削除して焼き直すこと。")
         return 1
     print(f"  ✓ 完了 {os.path.getsize(out) / 1e9:.2f} GB")
     return 0
