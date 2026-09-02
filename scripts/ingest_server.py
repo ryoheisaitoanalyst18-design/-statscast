@@ -89,6 +89,23 @@ CURRENT_LOCK = threading.Lock()
 # ============================================================
 # zip 展開 + CSV 結合
 # ============================================================
+def unique_path(directory: Path, name: str) -> Path:
+    """directory/name が既にあれば name_2.csv, name_3.csv … と衝突しない名前を返す。
+
+    TrackMan の zip は日付フォルダごとに同じファイル名 (例 game.csv) を持つことがあり、
+    basename だけで展開すると後の 1 本が前の 1 本を上書きして試合が丸ごと消える。
+    """
+    candidate = directory / name
+    if not candidate.exists():
+        return candidate
+    stem, suffix = candidate.stem, candidate.suffix
+    for i in range(2, 10000):
+        candidate = directory / f"{stem}_{i}{suffix}"
+        if not candidate.exists():
+            return candidate
+    raise RuntimeError(f"名前の衝突を解決できません: {directory / name}")
+
+
 def collect_csvs(job: Job) -> list[Path]:
     """アップロードされた CSV と、zip 内の CSV を集める。"""
     found: list[Path] = []
@@ -96,16 +113,21 @@ def collect_csvs(job: Job) -> list[Path]:
         if f.suffix.lower() == ".zip":
             dest = job.dir / f"{f.stem}_extracted"
             dest.mkdir(exist_ok=True)
+            n_from_zip = 0
             with zipfile.ZipFile(f) as z:
                 for member in z.namelist():
                     if not member.lower().endswith(".csv") or member.endswith("/"):
                         continue
-                    # zip slip 対策: 展開先を dest 配下に強制する
-                    safe = dest / Path(member).name
+                    # zip slip 対策: 展開先を dest 配下に強制する。
+                    # さらに同名 member の上書き (試合の消失) を防ぐため一意名にする。
+                    safe = unique_path(dest, Path(member).name)
                     with z.open(member) as src, open(safe, "wb") as out:
                         shutil.copyfileobj(src, out)
                     found.append(safe)
-            job.log(f"  zip 展開: {f.name} → CSV {len([p for p in found if dest in p.parents])} 本")
+                    n_from_zip += 1
+                    if safe.name != Path(member).name:
+                        job.log(f"    名前衝突を回避: {member} → {safe.name}")
+            job.log(f"  zip 展開: {f.name} → CSV {n_from_zip} 本")
         elif f.suffix.lower() == ".csv":
             found.append(f)
         else:
@@ -264,7 +286,12 @@ function render(){
   $("list").innerHTML=files.map(f=>`<li><span>${f.name.replace(/[<&]/g,"")}</span><span class="sz">${fmt(f.size)}</span></li>`).join("");
   $("go").disabled=files.length===0;
 }
-function add(fs){ files=files.concat([...fs].filter(f=>/\\.(csv|zip)$/i.test(f.name))); render(); }
+function add(fs){
+  for(const f of [...fs].filter(f=>/\\.(csv|zip)$/i.test(f.name))){
+    if(!files.some(g=>g.name===f.name&&g.size===f.size&&g.lastModified===f.lastModified)) files.push(f);
+  }
+  render();
+}
 const drop=$("drop");
 drop.onclick=()=>$("pick").click();
 $("pick").onchange=e=>add(e.target.files);
@@ -369,7 +396,12 @@ class Handler(BaseHTTPRequestHandler):
             with CURRENT_LOCK:
                 if CURRENT is not None:
                     return self._err(409, "別の取り込みが実行中です。完了を待ってください。")
-            sid = datetime.now().strftime("%Y%m%d_%H%M%S")
+            base_sid = datetime.now().strftime("%Y%m%d_%H%M%S")
+            sid = base_sid
+            i = 2
+            while sid in JOBS:  # 同一秒に 2 回押されても前のジョブを潰さない
+                sid = f"{base_sid}_{i}"
+                i += 1
             JOBS[sid] = Job(sid)
             return self._json({"sid": sid})
 
@@ -385,7 +417,7 @@ class Handler(BaseHTTPRequestHandler):
             length = int(self.headers.get("Content-Length", "0"))
             if length <= 0 or length > MAX_UPLOAD:
                 return self._err(413, f"サイズが不正です: {length} bytes")
-            dest = job.dir / name
+            dest = unique_path(job.dir, name)
             remaining = length
             with open(dest, "wb") as out:
                 while remaining > 0:

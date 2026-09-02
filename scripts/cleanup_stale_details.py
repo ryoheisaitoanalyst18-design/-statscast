@@ -44,8 +44,14 @@ def unwrap(doc):
 
 
 def collect_canonical_names(data_dir):
-    """全 yearData_*.json のリーダーボードに現れる選手名の和集合を返す。"""
-    canonical = set()
+    """全 yearData_*.json のリーダーボードに現れる選手名を kind 別に返す。
+
+    {"batter": {...}, "pitcher": {...}} を返す。**打者と投手を混ぜてはいけない**:
+    フロントは batter_detail を打者リーダーボードの行からしか開かないため、
+    同姓同名の投手がいるという理由で打者側の残骸を温存すると掃除漏れになる
+    (VsR/VsL のリーダーボードは通常版の部分集合だが、念のため取り込む)。
+    """
+    canonical = {kind: set() for kind in LEADERBOARD_KEYS}
     import glob
     for path in glob.glob(os.path.join(data_dir, "yearData_*.json")):
         try:
@@ -53,11 +59,19 @@ def collect_canonical_names(data_dir):
                 d = unwrap(json.load(f))
         except Exception:
             continue
-        for key in LEADERBOARD_KEYS.values():
-            for row in d.get(key, []):
-                name = row.get("Name")
-                if name:
-                    canonical.add(name)
+        if not isinstance(d, dict):
+            continue
+        for kind, key in LEADERBOARD_KEYS.items():
+            for lb_key, rows in d.items():
+                # batterLeaderboard / batterLeaderboardVsR / …VsL をまとめて拾う
+                if not lb_key.startswith(key) or not isinstance(rows, list):
+                    continue
+                for row in rows:
+                    if not isinstance(row, dict):
+                        continue
+                    name = row.get("Name")
+                    if name:
+                        canonical[kind].add(name)
     return canonical
 
 
@@ -103,11 +117,12 @@ def main():
     print(f"{'=== 削除モード ===' if do_delete else '=== DRY-RUN モード (--delete で実削除) ==='}")
 
     canonical = collect_canonical_names(data_dir)
-    print(f"カノニカル選手名: {len(canonical)} 人")
+    print("カノニカル選手名: "
+          + " / ".join(f"{kind} {len(names)} 人" for kind, names in sorted(canonical.items())))
 
     all_stale = []
     for kind, subdir in DETAIL_DIRS.items():
-        stale = find_stale(players_dir, subdir, canonical)
+        stale = find_stale(players_dir, subdir, canonical[kind])
         print(f"\n{kind}_detail/ 残骸: {len(stale)} 件")
         for p in stale:
             print(f"  {os.path.relpath(p, os.path.join(script_dir, '..'))}")
@@ -117,7 +132,8 @@ def main():
     report_path = os.path.join(script_dir, f"cleanup_report_{report_date}.txt")
     with open(report_path, "w", encoding="utf-8") as f:
         f.write(f"cleanup_stale_details.py 実行日: {report_date}\n")
-        f.write(f"カノニカル選手名: {len(canonical)} 人\n")
+        f.write("カノニカル選手名: "
+                + " / ".join(f"{k} {len(v)} 人" for k, v in sorted(canonical.items())) + "\n")
         f.write(f"残骸ファイル総数: {len(all_stale)} 件\n\n")
         for p in all_stale:
             f.write(os.path.relpath(p, os.path.join(script_dir, "..")) + "\n")
