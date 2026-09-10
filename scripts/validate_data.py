@@ -518,8 +518,9 @@ def check_asset_chunks(repo_root, html_refs):
 
     with open(main_js_path, encoding="utf-8", errors="ignore") as f:
         content = f.read()
-    # Vite のチャンク命名: ComponentName-HASH8chars.js (英字始まり・8文字以上のハッシュ)
-    chunk_names = set(re.findall(r'[A-Za-z][A-Za-z0-9]*-[A-Za-z0-9_]{8,}\.js', content))
+    # Vite の動的 import は "assets/ChunkName.js" 形式のダブルクォート文字列として埋め込まれる
+    # (旧パターン [A-Za-z0-9_]{8,} はハッシュに "-" を含む名前を見逃す)
+    chunk_names = set(re.findall(r'"assets/([A-Za-z0-9_.-]+\.js)"', content))
     if not chunk_names:
         warn("遅延チャンク確認", "チャンク参照が main JS に見つからなかった")
         return
