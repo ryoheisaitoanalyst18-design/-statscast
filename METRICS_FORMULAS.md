@@ -56,7 +56,7 @@
 | **BB%** | BB / PA × 100 |
 | **HardHit%** | （インプレー中の is_hard_hit 数）/ BBE × 100 |
 | **SwSp%（スイートスポット率）** | （Angle 8〜32°の打球数）/ BBE × 100 |
-| **Barrel%（バレル率）** | （バレル打球数）/ BBE × 100。ExitSpeed と打球角度の組み合わせで判定（閾値の詳細はパイプライン側参照）。 |
+| **Barrel%（バレル率）** | （バレル打球数）/ BBE × 100。バレル判定は MLB Statcast 定義に準拠し、ExitSpeed ≥ 98mph かつ打球角度が速度依存の帯に入る球（98/99/100/116mph を 26-30°/25-31°/24-33°/8-50° で線形補間、116mph 以上は 8-50°固定）。ExitSpeed が km/h の年度は mph に換算してから判定する。 |
 
 ### wOBA（線形ウェイト・定数）
 ```
@@ -114,7 +114,7 @@ wRC+ = round( wOBA / リーグ平均wOBA × 100 )
 - **AvgIVB** = InducedVertBreak 平均、**AvgHB** = HorzBreak 平均
 - **AvgEV_against** = 被インプレー打球 ExitSpeed 平均
 - **Runs_against** = 対戦打席の RunsScored 合計
-- **AvgSpinEff（平均回転効率）** = 全投球の SpinEff の平均（%）。SpinEff = 変化に寄与する有効回転成分（Magnus力を生む回転）/ SpinRate × 100。0〜100% の範囲で、高いほど変化量につながる回転の割合が多い。全球種混合の中央値は概ね 60〜70%。
+- **AvgSpinEff（平均回転効率）** = SpinEff が算出できた投球の平均（%）。物理域外として棄却された球は分母から除外する。SpinEff = 変化に寄与する有効回転成分（Magnus力を生む回転）/ SpinRate × 100。0〜100% の範囲で、高いほど変化量につながる回転の割合が多い。全球種混合の中央値は概ね 60〜70%。
 
 ---
 
