@@ -56,6 +56,7 @@
 | **BB%** | BB / PA × 100 |
 | **HardHit%** | （インプレー中の is_hard_hit 数）/ BBE × 100 |
 | **SwSp%（スイートスポット率）** | （Angle 8〜32°の打球数）/ BBE × 100 |
+| **Barrel%（バレル率）** | （バレル打球数）/ BBE × 100。ExitSpeed と打球角度の組み合わせで判定（閾値の詳細はパイプライン側参照）。 |
 
 ### wOBA（線形ウェイト・定数）
 ```
@@ -113,6 +114,7 @@ wRC+ = round( wOBA / リーグ平均wOBA × 100 )
 - **AvgIVB** = InducedVertBreak 平均、**AvgHB** = HorzBreak 平均
 - **AvgEV_against** = 被インプレー打球 ExitSpeed 平均
 - **Runs_against** = 対戦打席の RunsScored 合計
+- **AvgSpinEff（平均回転効率）** = 全投球の SpinEff の平均（%）。SpinEff = 変化に寄与する有効回転成分（Magnus力を生む回転）/ SpinRate × 100。0〜100% の範囲で、高いほど変化量につながる回転の割合が多い。全球種混合の中央値は概ね 60〜70%。
 
 ---
 
