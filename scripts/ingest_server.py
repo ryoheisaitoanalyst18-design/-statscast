@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""ローカル取込アプリ — TrackMan CSV/zip をブラウザから投入して本番反映まで自動実行する。
+"""ローカル取込アプリ — TrackMan CSV/xlsx/zip をブラウザから投入して本番反映まで自動実行する。
 
     python3 scripts/ingest_server.py        # → http://127.0.0.1:8787
 
-ブラウザで CSV/zip をドロップ → 「取り込んで本番に反映」→ 進捗ログが流れ、
+ブラウザで CSV/xlsx/zip をドロップ → 「取り込んで本番に反映」→ 進捗ログが流れ、
 検証ゲート (validate_data.py) が通ったときだけ push される。
 
 やっていること (中身は既存の update_and_deploy.sh に丸投げ):
@@ -106,8 +106,45 @@ def unique_path(directory: Path, name: str) -> Path:
     raise RuntimeError(f"名前の衝突を解決できません: {directory / name}")
 
 
+def xlsx_to_csv(src: Path, job: Job) -> Path:
+    """TrackMan の .xlsx 納品を CSV に変換して返す (2026秋シーズンから .xlsx 納品あり)。
+
+    値のみを読む (read_only=True, data_only=True)。日時セルは ISO 形式の文字列にして、
+    CSV 経由でも UTCDate/Date の解釈がブレないようにする。
+    """
+    import openpyxl  # 変換時のみ必要 (CSV/zip だけなら stdlib のまま動く)
+    from datetime import date as _date
+
+    def cell(v):
+        # xlsx は整数列も float で返す。マスターCSV は PitchNo=1 / Inning=1 の形なので合わせる。
+        if isinstance(v, float) and v.is_integer():
+            return int(v)
+        # 日付セルは 00:00:00 が付く。既存行は 'YYYY-MM-DD' なので日付だけにする。
+        if isinstance(v, datetime):
+            return v.date().isoformat() if v.time() == v.time().min else v.isoformat(sep=" ")
+        if isinstance(v, _date):
+            return v.isoformat()
+        return "" if v is None else v
+
+    out = src.with_suffix(".csv")
+    out = unique_path(out.parent, out.name)
+    wb = openpyxl.load_workbook(src, read_only=True, data_only=True)
+    ws = wb[wb.sheetnames[0]]
+    n = 0
+    with open(out, "w", newline="", encoding="utf-8") as fh:
+        writer = csv.writer(fh)
+        for row in ws.iter_rows(values_only=True):
+            if all(v is None for v in row):
+                continue
+            writer.writerow([cell(v) for v in row])
+            n += 1
+    wb.close()
+    job.log(f"  xlsx 変換: {src.name} → {out.name} ({max(n - 1, 0)} 行)")
+    return out
+
+
 def collect_csvs(job: Job) -> list[Path]:
-    """アップロードされた CSV と、zip 内の CSV を集める。"""
+    """アップロードされた CSV/xlsx と、zip 内のそれらを集める。"""
     found: list[Path] = []
     for f in job.files:
         if f.suffix.lower() == ".zip":
@@ -116,22 +153,24 @@ def collect_csvs(job: Job) -> list[Path]:
             n_from_zip = 0
             with zipfile.ZipFile(f) as z:
                 for member in z.namelist():
-                    if not member.lower().endswith(".csv") or member.endswith("/"):
+                    if member.endswith("/") or not member.lower().endswith((".csv", ".xlsx")):
                         continue
                     # zip slip 対策: 展開先を dest 配下に強制する。
                     # さらに同名 member の上書き (試合の消失) を防ぐため一意名にする。
                     safe = unique_path(dest, Path(member).name)
                     with z.open(member) as src, open(safe, "wb") as out:
                         shutil.copyfileobj(src, out)
-                    found.append(safe)
+                    found.append(xlsx_to_csv(safe, job) if safe.suffix.lower() == ".xlsx" else safe)
                     n_from_zip += 1
                     if safe.name != Path(member).name:
                         job.log(f"    名前衝突を回避: {member} → {safe.name}")
             job.log(f"  zip 展開: {f.name} → CSV {n_from_zip} 本")
         elif f.suffix.lower() == ".csv":
             found.append(f)
+        elif f.suffix.lower() == ".xlsx":
+            found.append(xlsx_to_csv(f, job))
         else:
-            job.log(f"  スキップ (CSV/zip ではない): {f.name}")
+            job.log(f"  スキップ (CSV/xlsx/zip ではない): {f.name}")
     return sorted(found)
 
 
@@ -267,7 +306,7 @@ pre{margin:16px 0 0;padding:16px;background:var(--card);border:1px solid var(--l
   <b>ここに CSV / zip をドロップ</b>
   <span>クリックして選択もできます（複数可・zip の中身も自動で取り出します）</span>
 </div>
-<input type="file" id="pick" multiple accept=".csv,.zip" class="hide">
+<input type="file" id="pick" multiple accept=".csv,.xlsx,.zip" class="hide">
 <ul id="list"></ul>
 
 <div class="row">
@@ -412,8 +451,8 @@ class Handler(BaseHTTPRequestHandler):
             if job.state != "idle":
                 return self._err(409, "この取り込みは既に開始しています。")
             name = os.path.basename(self._query().get("name", "upload.csv"))
-            if not name.lower().endswith((".csv", ".zip")):
-                return self._err(400, f"CSV/zip ではありません: {name}")
+            if not name.lower().endswith((".csv", ".xlsx", ".zip")):
+                return self._err(400, f"CSV/xlsx/zip ではありません: {name}")
             length = int(self.headers.get("Content-Length", "0"))
             if length <= 0 or length > MAX_UPLOAD:
                 return self._err(413, f"サイズが不正です: {length} bytes")

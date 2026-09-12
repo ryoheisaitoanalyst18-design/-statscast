@@ -454,7 +454,7 @@ def check_models(data_dir):
         else:
             ng("グリッド地形が平坦", f"強打帯{hi:.2f} vs 弱打帯{lo:.2f}")
     # 2026年大会別スコープのモデル健全性 (tendencies と対称にチェック)
-    for scope in ("2026_league", "2026_fresh"):
+    for scope in competition_scopes_2026(data_dir):
         check_stuffplus_scope(data_dir, scope)
         check_xwoba_scope(data_dir, scope)
 
@@ -567,6 +567,22 @@ def check_html(repo_root):
     check_asset_chunks(repo_root, html_refs)
 
 
+def competition_scopes_2026(data_dir):
+    """competitions_2026.json から 2026 の大会スコープ名 (2026_autumn 等) を読む。
+    大会区分はシーズン進行で増えるので、検証側もハードコードせず実データに従う。"""
+    path = os.path.join(data_dir, "competitions_2026.json")
+    if not os.path.exists(path):
+        return []
+    try:
+        inner = unwrap(load(path))
+    except Exception:
+        return []
+    order = inner.get("order")
+    if not order:
+        order = [k for k, v in inner.items() if isinstance(v, dict) and "dates" in v]
+    return [f"2026_{k}" for k in order]
+
+
 def check_competitions(data_dir):
     """competitions_YYYY.json の存在・tRPCラップ構造・大会区分キーを検証する。"""
     import glob as _glob
@@ -656,7 +672,7 @@ def check_competitions_date_files(data_dir):
         ng("competitions_2026.json", f"パース不能: {e}")
         return
 
-    groups = {k: v for k, v in d.items() if k != "cutoff"}
+    groups = {k: v for k, v in d.items() if isinstance(v, dict) and "dates" in v}
     if not groups:
         ng("competitions_2026.json", "大会グループが空")
         return
@@ -667,6 +683,7 @@ def check_competitions_date_files(data_dir):
             ng("competitions_2026.json", f"グループ '{key}' に label/dates がない")
             return
         listed_dates.extend(grp["dates"])
+    listed_dates = sorted(set(listed_dates))
 
     missing_files = [
         dt for dt in listed_dates
@@ -869,16 +886,16 @@ def main():
         check_player_details(data_dir, latest_doc)
         check_result_pitches(data_dir, latest_doc)
 
-    # 2026年大会別ファイル (yearData_2026_{league,fresh}.json) — CLAUDE.md に記載
-    for scope in ("2026_league", "2026_fresh"):
+    # 2026年大会別ファイル (yearData_2026_{spring,fresh,autumn,league}.json) — CLAUDE.md に記載
+    for scope in competition_scopes_2026(data_dir):
         check_year_data(data_dir, scope)
 
     numeric_years = [y for y in years if y != "All"]
     check_tendencies(data_dir, "All")
     if numeric_years:
         check_tendencies(data_dir, numeric_years[-1])
-    # 2026年大会別の傾向ファイル (tendencies_2026_{league,fresh}.json)
-    for scope in ("2026_league", "2026_fresh"):
+    # 2026年大会別の傾向ファイル (tendencies_2026_*.json)
+    for scope in competition_scopes_2026(data_dir):
         check_tendencies(data_dir, scope)
     check_models(data_dir)
     check_competitions(data_dir)
