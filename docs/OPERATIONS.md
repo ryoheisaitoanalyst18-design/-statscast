@@ -139,30 +139,85 @@ python3 scripts/cleanup_stale_details.py [DATA_DIR] --delete   # 実削除 (前�
 球のポップアップから YouTube の試合動画に飛ぶ機能。動画は**限定公開**でアップロードし、
 動画IDだけを公開データに載せる (動画実体はこのリポジトリに入れない)。
 
+**1試合の流れは一本道**。①→⑤の順に進める。人の手が要るのは②と④だけ。
+
+```
+DVD → ①rip_dvd.py → ②Watson1で紐づけ → ③batch_burn.py → ④YouTube → ⑤export+デプロイ
+```
+
 ```bash
-# 0. 前提: Watson1 (~/diamondlab) 側でイニング別クリップに球をタグ付け済みであること
-python3 scripts/video/concat_game_video.py --dry-run     # 構成と尺の確認
-python3 scripts/video/concat_game_video.py               # 連結 → ~/.diamondlab/videos/upload/
-# 1. (任意) TrackMan データを映像に焼き込む
-python3 scripts/video/make_overlay.py --game-uid <UID> --duration 300   # まず試し焼き
-python3 scripts/video/make_overlay.py --game-uid <UID>                  # 全編 (約24分/試合)
-# 2. {試合UID}.mp4 (焼き込むなら {試合UID}_overlay.mp4) を YouTube に「限定公開」でアップロード
-# 3. 動画IDを scripts/video/youtube_ids.json に記入
+# ① DVD を無劣化で吸い出す (5〜10分)。HandBrake は使わない (下記「DVD取り込み」参照)
+python3 scripts/video/rip_dvd.py --dry-run               # まず構成と暗号化の有無を確認
+python3 scripts/video/rip_dvd.py --name 20260912_法政明治  # → ~/.diamondlab/videos/
+
+# ② Watson1 (~/diamondlab) で: 動画を試合に登録 → アンカー1球を手動リンク
+#    → 「⚡残りを自動リンク」 → 「✂イニング別に切出し」
+#    手作業はここだけ。アンカーは試合につき1球でよい (残りは TrackMan の実時刻から逆算)。
+
+# ③ 連結→焼き込み→検査を無人で回す (1試合21分、並列2)。試合の指定は不要 —
+#    紐づけ済みかつ未アップの試合を自動で全部拾う。中断しても再実行で続きから。
+python3 scripts/video/batch_burn.py --dry-run            # 何が処理待ちか見る
+nohup python3 scripts/video/batch_burn.py > ~/batch_burn.log 2>&1 &
+tail -f ~/batch_burn.log
+
+# ④ ~/.diamondlab/videos/upload/{UID}_overlay.mp4 を YouTube に「限定公開」でアップロード
+#    → 動画IDを scripts/video/youtube_ids.json に記入
+
+# ⑤ サイトに反映
 python3 scripts/video/export_video_links.py              # → data/videos/links.json
 ./update_and_deploy.sh --data-only
 ```
+
+`batch_burn.py` の主なオプション: `--jobs 1` (PCを他に使うとき) / `--crf 23` (容量23%減) /
+`--game-uid <UID>` (1試合だけ) / `--force` (完成済みも焼き直す)。
+
+単発でやるなら `concat_game_video.py` → `make_overlay.py` を直接叩いてもよい (batch_burn が
+内部で呼んでいるのはこの2本)。試し焼きは `make_overlay.py --game-uid <UID> --duration 300`。
 
 **焼き込み版は元の連結動画と尺・タイムラインが完全に同一** (トリムせず再エンコードするだけ)。
 `links.json` の再生位置はそのまま使えるので、焼き込み版を上げればサイトからのジャンプ先も
 データ付き映像になる。プレーン版を別に上げる必要はない。
 **ただし `--start` / `--duration` を付けた出力は先頭がズレる**ので、試し焼き用と割り切ること。
 
+#### DVD取り込み (2026-08-26 に HandBrake から乗り換え)
+
+**HandBrake を使わない**。HandBrake はストリームコピーができず必ず再エンコードするため、
+1試合40分かかるうえ、焼き込みと合わせて劣化が2回起きていた。`rip_dvd.py` は映像を
+一切触らずに包み直すので、ドライブの読み出し速度律速 (5〜10分) で劣化もゼロ。
+
+- **インターレース解除は rip ではやらない**。DVD は 720x480 インターレースだが、
+  ここで解除すると再エンコードが1回増えて HandBrake と同じことになる。焼き込みが
+  どのみち再エンコードするので、`make_overlay.py --deinterlace` (yadif) で同時に済ませる。
+  `rip_dvd.py` が要否を判定して `{元動画}.rip.json` に書き残し、`batch_burn.py` が
+  自動で `--deinterlace` を付ける。手で付ける必要はない。
+- **判定がつかないときは解除する側に倒してある**。idet は真っ黒な導入部が続くと
+  結論を出せないので、その場合はコンテナのフィールド順フラグに従う。縞が残ったまま
+  40試合焼く方が、progressive 素材に yadif をかけるより damage が大きい。
+- Watson1 (PySide6 QMediaPlayer) が MPEG-2/VOB を再生できることは実測確認済み
+  (Qt 内蔵の FFmpeg バックエンドがソフトウェアデコードする。GStreamer プラグインは不要)。
+- **コピー防止 (CSS) がかかっていると読めない**。`rip_dvd.py` が警告を出すので、
+  その場合は MakeMKV で吸い出してから `--source` でそのフォルダを指す。
+- ⚠️ **実ディスクでの検証は未実施** (2026-08-26 時点で光学ドライブ未接続)。
+  秋季リーグ初戦で必ず `--dry-run` から始めること。
+
 落とし穴:
 
+- **完成検査はメタデータを信用しない**。mp4 の `moov atom` の有無も `Duration` も
+  末尾が欠けたファイルを見抜けない (どちらも moov 内のメタデータで、実データとは独立)。
+  しかも `-movflags +faststart` は moov を先頭に置くので、途中で切れていても開ける。
+  確実なのは全編デコード (`-f null -`、2.3GB で 144秒) だけ。`batch_burn.py` は
+  焼いた直後にこれを回し、破損を検出したら出力を削除する (残すと次回 skip されるため)。
+  2026-08-25 に未完成ファイルを YouTube に上げて「処理を中止しました」で弾かれた実績あり。
+- **並列は2まで**。x264 は12スレッドまでスケールしないので 6スレッド×2本が最も速いが、
+  全体で1.29倍にしかならない (2倍にはならない)。3本以上はメモリ (7GB) を食い合って伸びない。
+- **プリセットを上げて速くしない**。superfast は17分だがファイルが45%、ultrafast は
+  13.7分だが167%膨らみ、アップロード時間に跳ね返って逆効果。veryfast/crf21 が最適点。
 - **1試合1本に連結してからアップする**。Watson1 の紐づけはイニット別クリップ単位だが、
   17本を個別にアップすると動画IDの収集が現実的でない。連結マニフェストが
   「クリップ内秒数 → 通し秒数」の変換を持つので、連結を挟まないと再生位置が出せない。
-- **1試合100分超**。YouTube の15分制限を外すにはアカウントの電話番号確認が必要。
+- **1試合100分超**。YouTube の15分制限を外すにはアカウントの電話番号確認が必要だが、
+  **このアカウントでは確認済み** (2時間超の動画をアップできている)。長尺で弾かれたら
+  アカウント設定ではなくファイルの破損を疑うこと。
 - **鍵は TrackMan の生値そのもの** (`日付|投手|投球位置` と `日付|打球速度|角度|飛距離`)。
   公開JSONに GameUID も PitchNo も無いための方式で、パイプラインが単位換算や丸めを
   変えると**無言で全滅する**。検証ゲートが実データ照合で到達率を見ているので、
