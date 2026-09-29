@@ -149,25 +149,38 @@ Update site data and assets ($MODE, $(date +%Y-%m-%d))
 - Passed validate_data.py gate ($(date +%H:%M)).
 EOF
 )"
+PREV_RID=$(command -v gh >/dev/null && gh run list --limit 1 --json databaseId -q '.[0].databaseId' 2>/dev/null || echo "")
 git push origin main
 echo "push 完了。GitHub Actions を待機..."
 
 if command -v gh >/dev/null; then
-  RID=$(gh run list --limit 1 --json databaseId -q '.[0].databaseId')
+  # push 直後は新しい run がまだ登録されていないことがある。直前の run を拾うと
+  # 「前回の成功」を見て配信切替前に URL を確認し、偽の失敗/成功になる (2026-09-29 実例)。
+  RID=""
   for i in $(seq 1 30); do
+    RID=$(gh run list --limit 1 --json databaseId -q '.[0].databaseId' 2>/dev/null || echo "")
+    [ -n "$RID" ] && [ "$RID" != "$PREV_RID" ] && break
+    sleep 5
+  done
+  for i in $(seq 1 60); do
     STATUS=$(gh run view "$RID" --json status -q .status 2>/dev/null || echo "")
     [ "$STATUS" = "completed" ] && break
     sleep 10
   done
   echo "Actions: $(gh run view "$RID" --json conclusion -q .conclusion 2>/dev/null || echo '不明')"
-  sleep 8
   CURR_JS=$(grep -o 'index-[A-Za-z0-9_-]*\.js' index.html | head -1)
+  # Pages の配信切替は Actions 完了から数十秒遅れることがあるので、新バンドルが出るまで最大3分待つ
+  LIVE_JS=""
+  for i in $(seq 1 18); do
+    LIVE_JS=$(curl -s --max-time 15 "$LIVE_BASE/" | grep -o 'index-[A-Za-z0-9_-]*\.js' | head -1)
+    [ "$LIVE_JS" = "$CURR_JS" ] && break
+    sleep 10
+  done
   for u in "/" "/assets/$CURR_JS" "/data/years.json"; do
     CODE=$(curl -s -o /dev/null -w "%{http_code}" --retry 2 --max-time 15 "$LIVE_BASE$u")
     printf "  %-30s -> %s\n" "$u" "$CODE"
     [ "$CODE" = "200" ] || { echo "エラー: 本番URL異常 ($u)"; exit 1; }
   done
-  LIVE_JS=$(curl -s --max-time 15 "$LIVE_BASE/" | grep -o 'index-[A-Za-z0-9_-]*\.js' | head -1)
   [ "$LIVE_JS" = "$CURR_JS" ] && echo "✅ 本番が新バンドル ($LIVE_JS) を配信中" \
     || { echo "エラー: 本番JS不一致 live=$LIVE_JS expected=$CURR_JS"; exit 1; }
 else
