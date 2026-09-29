@@ -150,11 +150,47 @@ def check_year_data(data_dir, year):
         else:
             ng(f"{name}: 回転効率中央値異常", f"{smed:.1f}% (期待40-90)")
 
+    # カウント別分析: 同じカウントが2行に割れていない ("1-2" と "1.0-2.0" に割れて 23-24行になっていた回帰)
+    counts = [r.get("Count") for r in d.get("countAnalysis", [])]
+    bad_keys = [c for c in counts if not re.fullmatch(r"[0-3]-[0-2]", str(c))]
+    if len(counts) != len(set(counts)) or bad_keys or len(counts) > 12:
+        ng(f"{name}: カウント別分析のキー異常", f"{len(counts)}行 重複/不正 {bad_keys[:3]}")
+    elif counts:
+        ok(f"{name}: カウント別分析 {len(counts)}カウント (重複なし)")
+
+    # 投球回の回帰チェック: リーグ全体の アウト数/対戦打者数 は野球の構造上 0.66-0.74 付近。
+    # PlayResult ベースで数えて犠打・併殺を落としていた頃は 0.645 だった (2026-09-29 修正)。
+    tp = d.get("teamPitching", [])
+    outs = sum((r.get("Outs") if r.get("Outs") is not None else r.get("IP", 0) * 3) for r in tp)
+    tbf = sum(r.get("TBF", 0) for r in tp)
+    if tbf >= 300:
+        ratio = outs / tbf
+        if 0.66 <= ratio <= 0.74:
+            ok(f"{name}: アウト数/対戦打者 {ratio:.3f} (投球回の整合)")
+        else:
+            ng(f"{name}: アウト数/対戦打者が異常", f"{ratio:.3f} (期待 0.66-0.74) — 投球回の数え方を確認")
+    # チームの 打撃の打席合計 = 投手の対戦打者合計 (同じ打席を両側から数えている)
+    pa_bat = sum(r.get("PA", 0) for r in d["teamBatting"])
+    if tbf and pa_bat and abs(pa_bat - tbf) > max(5, 0.01 * tbf):
+        ng(f"{name}: 打席合計の不一致", f"打撃 {pa_bat} vs 投手 {tbf}")
+
     teams = {t.get("Team") for t in d["teamBatting"]}
     if teams <= VALID_TEAMS and len(teams) >= 2:
         ok(f"{name}: チーム構成")
     else:
         ng(f"{name}: チーム構成", str(teams - VALID_TEAMS))
+
+    # wRC+ の基準 = 打席数加重のリーグ wOBA なので、全打者の打席加重平均はほぼ 100 になる
+    # (旧実装は「規定打席以上の選手の単純平均」を基準にしており、加重平均が 100 から数%ずれていた)
+    wr = [(r["wRC_plus"], r.get("PA", 0) - r.get("SH", 0)) for r in d["batterLeaderboard"]
+          if r.get("wRC_plus") is not None and r.get("PA", 0) > 0]
+    wsum = sum(w for _, w in wr)
+    if wsum >= 300:
+        avg_wrc = sum(v * w for v, w in wr) / wsum
+        if 97 <= avg_wrc <= 103:
+            ok(f"{name}: wRC+ の打席加重平均 {avg_wrc:.1f} (≈100)")
+        else:
+            ng(f"{name}: wRC+ の打席加重平均が100から外れている", f"{avg_wrc:.1f} — リーグwOBAの定義を確認")
 
     qual = [r["wOBA"] for r in d["batterLeaderboard"] if r.get("PA", 0) >= 20 and r.get("wOBA") is not None]
     if qual:
@@ -191,8 +227,8 @@ def check_player_details(data_dir, year_doc):
         ok(f"投手詳細ファイル: 上位{len(rows_p)}人分すべて実在")
 
 
-RESULT_CATS = {"1B", "2B", "3B", "HR", "out", "K_swing", "K_look", "BB", "HBP", "sac"}
-RESULT_CONTACT_CATS = {"1B", "2B", "3B", "HR", "out", "sac"}
+RESULT_CATS = {"1B", "2B", "3B", "HR", "out", "K_swing", "K_look", "BB", "HBP", "sac", "sf"}
+RESULT_CONTACT_CATS = {"1B", "2B", "3B", "HR", "out", "sac", "sf"}
 
 
 def check_result_pitches(data_dir, year_doc):
@@ -495,8 +531,27 @@ def check_run_expectancy(data_dir):
 
     anomalous = sorted(k for k in states.keys() if k not in expected)
     if anomalous:
-        warn("run_expectancy.json: 想定外の状態キー (ソース CSV の外れ値行と推定。パイプライン側で要確認)",
-             f"{len(anomalous)}件: {anomalous}")
+        ng("run_expectancy.json: 想定外の状態キー", f"{len(anomalous)}件: {anomalous[:5]}")
+
+    # 鮮度: パイプラインが毎回作る (2026-09-29〜)。全年度の試合数と一致しなければ古いファイル
+    # (旧 build_run_values.py の出力が 2026-05 から更新されずに残っていた)
+    rk = d.get("pitcherRankings", [])
+    names = [r.get("pitcher") for r in rk]
+    if not rk:
+        ng("run_expectancy.json: pitcherRankings が空")
+    elif len(names) != len(set(names)):
+        ng("run_expectancy.json: 投手の重複", str(len(names) - len(set(names))))
+    games = (d.get("metadata") or {}).get("totalGames")
+    try:
+        meta = load(os.path.join(data_dir, "models", "models_meta.json"))
+        un = meta.get("unitNormalization", {})
+        total_games = un.get("imperial_games", 0) + un.get("metric_games", 0)
+    except Exception:
+        total_games = None
+    if games and total_games and games != total_games:
+        ng("run_expectancy.json が古い", f"{games}試合 (現データ {total_games}試合) — パイプラインで再生成されていない")
+    elif games:
+        ok(f"run_expectancy.json: {games}試合・投手{len(rk)}人 (現データと一致)")
 
 
 def check_asset_chunks(repo_root, html_refs):
@@ -729,6 +784,13 @@ def check_defense_data(data_dir):
         ok("defenseData.json: 必須キー (pitchUID/year/pitcher/batted/fielders) 実在")
     else:
         ng("defenseData.json: 必須キー欠落", ", ".join(bad[:3]))
+    # 同じ打球が2回入っていないこと (旧ファイルは 11,377件中 4,067件が重複していた)
+    uids = [r.get("pitchUID") for r in d]
+    dup = len(uids) - len(set(uids))
+    if dup:
+        ng("defenseData.json: 同じ打球 (pitchUID) の重複", f"{dup}件")
+    else:
+        ok(f"defenseData.json: pitchUID 重複なし ({len(uids)}打球)")
 
 
 YOUTUBE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")

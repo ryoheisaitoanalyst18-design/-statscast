@@ -41,8 +41,11 @@ python3 scripts/validate_data.py          # データ+HTML の整合性ゲート
 ./ingest.sh    # → http://127.0.0.1:8787 をブラウザで開き、CSV/zip をドロップするだけ
 ```
 
-zip 展開 → 中の CSV を列の和集合で 1 本に結合 (列ズレ破損行を作らない) → 下の
-`update_and_deploy.sh <csv> --clean` を実行し、進捗ログをブラウザに流す。
+zip 展開 (zip の中の zip も) → 各ファイルを `tokyo-baseball/trackman_io.py` で判定 →
+投球データだけを列の和集合で 1 本に結合 (列ズレ破損行を作らない)。ポジショニング (守備位置) CSV は
+`~/ubuntu_data/positioning/` へ保存 (守備分析の入力)、ヘッダー無し等の読めないファイルは理由をログに出して除外 →
+下の `update_and_deploy.sh <csv> --clean` を実行し、進捗ログをブラウザに流す。
+**同じ試合を入れ直した場合は二重にならず置き換え**になる (merge_csv の試合単位置き換え)。
 localhost からのみ受信。アップロード原本は `~/statscast_inbox/<日時>/` に残る。
 
 ## デプロイ
@@ -70,7 +73,8 @@ localhost からのみ受信。アップロード原本は `~/statscast_inbox/<�
 | `models/stuffplus_{scope}.json` | Stuff+ リーダーボード | 生JSON |
 | `models/xwoba_{scope}.json` | xwOBA/xBA/xSLG (batters+pitchers) | 生JSON |
 | `models/xwoba_grid.json` / `models_meta.json` | ランドスケープ / 方法論・検証値 | 生JSON |
-| `run_expectancy.json` / `defenseData.json` | RE行列 / 守備 (手動系、消さない) | — |
+| `run_expectancy.json` | Run Value ページ (RE行列・球種別/投手別 RV)。パイプライン (`compute_run_values_all`) が毎回生成 | 生JSON |
+| `defenseData.json` | 守備分析 (ポジショニング CSV × 打球、1打球1件)。パイプライン (`build_defense_data.py`) が毎回生成 | 生JSON |
 | `videos/links.json` | 球↔試合動画 (YouTube限定公開) の紐づけ。任意・無くても動く | 生JSON |
 
 `players/batter_zones/` と `dates_2026.json` はフロント未使用のため公開しない

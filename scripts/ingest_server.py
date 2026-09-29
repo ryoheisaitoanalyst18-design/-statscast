@@ -8,13 +8,18 @@
 
 やっていること (中身は既存の update_and_deploy.sh に丸投げ):
   1. アップロードを ~/statscast_inbox/<日時>/ に保存
-  2. zip は展開し、中の CSV を「列の和集合」で 1 本に結合 (列ズレ破損行を作らない)
+  2. zip は展開し、各ファイルを tokyo-baseball/trackman_io.py で判定して読む
+     - 投球データ → 「列の和集合」で 1 本に結合 (列ズレ破損行を作らない)
+     - ポジショニング (守備位置) → ~/ubuntu_data/positioning/ へ保存 (守備分析ページの入力)
+     - ヘッダー無し・集計表など投球データでないもの → 理由をログに出して取り込まない
+       (旧実装は何でも結合したため、ヘッダー無し CSV の値が列名化した破損行がマスターに入った)
   3. update_and_deploy.sh <combined.csv> --clean を実行
      → マスターCSVバックアップ → QA(打席合体/六大学外/破損行) → --clean 除外 →
-       PitchUID 重複除外 → マージ → 全再生成 → 検証ゲート → push → 本番URL確認
+       試合単位の置き換え (同じ試合の入れ直しは二重にせず置き換え) → マージ → 全再生成 →
+       検証ゲート → push → 本番URL確認
   4. 出力を 1 行ずつブラウザへ中継
 
-localhost からしか接続を受けない。stdlib のみ (pandas 等は子プロセス側の依存)。
+localhost からしか接続を受けない。ファイル判定だけ pandas (パイプラインと同じ環境) を使う。
 """
 from __future__ import annotations
 
@@ -35,6 +40,8 @@ from pathlib import Path
 REPO_DIR = Path(__file__).resolve().parent.parent
 DEPLOY_SH = REPO_DIR / "update_and_deploy.sh"
 INBOX = Path.home() / "statscast_inbox"
+PIPELINE_DIR = Path.home() / "tokyo-baseball"
+POSITIONING_DIR = Path(os.environ.get("STATSCAST_POSITIONING", Path.home() / "ubuntu_data" / "positioning"))
 HOST = "127.0.0.1"
 PORT = int(os.environ.get("INGEST_PORT", "8787"))
 MAX_UPLOAD = 2 * 1024 * 1024 * 1024  # 1ファイル 2GB まで
@@ -146,25 +153,42 @@ def xlsx_to_csv(src: Path, job: Job) -> Path:
 def collect_csvs(job: Job) -> list[Path]:
     """アップロードされた CSV/xlsx と、zip 内のそれらを集める。"""
     found: list[Path] = []
+
+    def extract_zip(zpath: Path, depth: int = 0) -> None:
+        dest = job.dir / f"{zpath.stem}_extracted"
+        dest.mkdir(exist_ok=True)
+        n_from_zip = 0
+        with zipfile.ZipFile(zpath) as z:
+            for info in z.infolist():
+                member = info.filename
+                # 日本語ファイル名: UTF-8 フラグの無い zip は cp932 で名前を復元する
+                if not (info.flag_bits & 0x800):
+                    try:
+                        member = member.encode("cp437").decode("cp932")
+                    except (UnicodeEncodeError, UnicodeDecodeError):
+                        pass
+                low = member.lower()
+                if member.endswith("/") or "__macosx" in low or not low.endswith((".csv", ".xlsx", ".zip")):
+                    continue
+                # zip slip 対策: 展開先を dest 配下に強制する。
+                # さらに同名 member の上書き (試合の消失) を防ぐため一意名にする。
+                safe = unique_path(dest, Path(member).name)
+                with z.open(info) as src, open(safe, "wb") as out:
+                    shutil.copyfileobj(src, out)
+                if safe.name != Path(member).name:
+                    job.log(f"    名前衝突を回避: {member} → {safe.name}")
+                if safe.suffix.lower() == ".zip":
+                    # zip の中の zip (フレッシュトーナメント分などで実例あり) も展開する
+                    if depth < 3:
+                        extract_zip(safe, depth + 1)
+                    continue
+                found.append(xlsx_to_csv(safe, job) if safe.suffix.lower() == ".xlsx" else safe)
+                n_from_zip += 1
+        job.log(f"  zip 展開: {zpath.name} → ファイル {n_from_zip} 本")
+
     for f in job.files:
         if f.suffix.lower() == ".zip":
-            dest = job.dir / f"{f.stem}_extracted"
-            dest.mkdir(exist_ok=True)
-            n_from_zip = 0
-            with zipfile.ZipFile(f) as z:
-                for member in z.namelist():
-                    if member.endswith("/") or not member.lower().endswith((".csv", ".xlsx")):
-                        continue
-                    # zip slip 対策: 展開先を dest 配下に強制する。
-                    # さらに同名 member の上書き (試合の消失) を防ぐため一意名にする。
-                    safe = unique_path(dest, Path(member).name)
-                    with z.open(member) as src, open(safe, "wb") as out:
-                        shutil.copyfileobj(src, out)
-                    found.append(xlsx_to_csv(safe, job) if safe.suffix.lower() == ".xlsx" else safe)
-                    n_from_zip += 1
-                    if safe.name != Path(member).name:
-                        job.log(f"    名前衝突を回避: {member} → {safe.name}")
-            job.log(f"  zip 展開: {f.name} → CSV {n_from_zip} 本")
+            extract_zip(f)
         elif f.suffix.lower() == ".csv":
             found.append(f)
         elif f.suffix.lower() == ".xlsx":
@@ -175,35 +199,38 @@ def collect_csvs(job: Job) -> list[Path]:
 
 
 def combine_csvs(csvs: list[Path], out_path: Path, job: Job) -> int:
-    """複数 CSV を「列の和集合」で 1 本に結合する。
+    """投球データのファイルだけを「列の和集合」で 1 本に結合する。
 
-    列構成が違う CSV を単純連結すると列ズレ破損行が生まれる (過去に 1,671 球の実害)。
-    DictReader/DictWriter を通し、欠けている列は空欄で埋めることでこれを防ぐ。
+    各ファイルは trackman_io.read_trackman_file で判定する (行末カンマ・タイトル行・
+    列名誤字を吸収)。ポジショニングは守備分析の置き場へ保存し、投球データでないものは
+    理由をログに出して結合しない。列構成が違うファイルは欠けた列を空欄で埋める
+    (単純連結すると列ズレ破損行が生まれる。過去に 1,671 球の実害)。
     """
-    headers: list[str] = []
-    seen: set[str] = set()
-    for p in csvs:
-        with open(p, newline="", encoding="utf-8-sig", errors="replace") as fh:
-            cols = next(csv.reader(fh), [])
-        for c in cols:
-            if c not in seen:
-                seen.add(c)
-                headers.append(c)
+    sys.path.insert(0, str(PIPELINE_DIR))
+    import hashlib
+    import pandas as pd
+    import trackman_io
 
-    total = 0
-    with open(out_path, "w", newline="", encoding="utf-8") as out:
-        writer = csv.DictWriter(out, fieldnames=headers, restval="", extrasaction="ignore")
-        writer.writeheader()
-        for p in csvs:
-            with open(p, newline="", encoding="utf-8-sig", errors="replace") as fh:
-                n = 0
-                for row in csv.DictReader(fh):
-                    row.pop(None, None)  # 列数超過分は捨てる (DictWriter が拒否するため)
-                    writer.writerow(row)
-                    n += 1
-            total += n
-            job.log(f"    {p.name}: {n} 行")
-    return total
+    frames = []
+    for p in csvs:
+        df, kind, reason = trackman_io.read_trackman_file(str(p))
+        if kind == "pitch":
+            frames.append(df)
+            job.log(f"    {p.name}: {len(df)} 球")
+        elif kind == "positioning":
+            POSITIONING_DIR.mkdir(parents=True, exist_ok=True)
+            digest = hashlib.md5(p.read_bytes()).hexdigest()[:10]
+            dest = POSITIONING_DIR / f"{p.stem}__{digest}.csv"
+            if not dest.exists():
+                df.to_csv(dest, index=False)
+            job.log(f"    {p.name}: 守備位置データ → {dest.parent.name}/ に保存 (守備分析で使用)")
+        else:
+            job.log(f"    ⚠ {p.name}: 取り込みません — {reason}")
+    if not frames:
+        return 0
+    combined = pd.concat(frames, ignore_index=True, sort=False)
+    combined.to_csv(out_path, index=False)
+    return len(combined)
 
 
 # ============================================================
@@ -223,13 +250,19 @@ def run_job(job: Job) -> None:
         job.log(f"CSV {len(csvs)} 本を結合します:")
         combined = job.dir / "combined.csv"
         rows = combine_csvs(csvs, combined, job)
-        job.log(f"結合完了: {rows} 行 → {combined}")
+        if rows > 0:
+            job.log(f"結合完了: {rows} 行 → {combined}")
+            args = [str(combined), "--clean"]
+        else:
+            # 投球データが無い (守備位置データだけ等) → マスターは変えずに全再生成だけ行う
+            job.log("投球データのファイルはありませんでした。マスターは変更せず全再生成します。")
+            args = ["--regenerate"]
         job.log("")
         job.log("━━━ update_and_deploy.sh 開始 (再生成に 5〜9 分かかります) ━━━")
 
         env = dict(os.environ, PYTHONUNBUFFERED="1")
         proc = subprocess.Popen(
-            ["bash", str(DEPLOY_SH), str(combined), "--clean"],
+            ["bash", str(DEPLOY_SH), *args],
             cwd=str(REPO_DIR),
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
@@ -326,7 +359,7 @@ function render(){
   $("go").disabled=files.length===0;
 }
 function add(fs){
-  for(const f of [...fs].filter(f=>/\\.(csv|zip)$/i.test(f.name))){
+  for(const f of [...fs].filter(f=>/\\.(csv|xlsx|zip)$/i.test(f.name))){
     if(!files.some(g=>g.name===f.name&&g.size===f.size&&g.lastModified===f.lastModified)) files.push(f);
   }
   render();
