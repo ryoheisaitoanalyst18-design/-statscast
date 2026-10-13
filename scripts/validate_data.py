@@ -617,6 +617,7 @@ def check_runexp(data_dir, scopes):
         mc = q.get("meanCertainty")
         if mc is not None and mc < 0.85:
             ng(f"{tag}: 塁状況の推定の確信度が低い", f"{mc}")
+        check_runexp_advance(tag, scope, d, teams)
         if scope != "All":
             continue
         # 全年度だけ: 野球として当然の形 (マルコフ) と既知値の目安
@@ -648,6 +649,60 @@ def check_runexp(data_dir, scopes):
             ok(f"{tag}: マルコフモデルの9回あたり得点 ≈ 実際 (全大学 ±0.3 以内)")
         if total_games and d.get("games") != total_games:
             ng(f"{tag} が古い", f"{d.get('games')}試合 (現データ {total_games}試合)")
+
+
+def check_runexp_advance(tag, scope, d, teams):
+    """走者の進め方 (advance ブロック): 走者の行方の恒等式・場面別の内訳の合計・率の値域・盗塁の記録期間。"""
+    L = d.get("league", {})
+    if "advance" not in L:
+        (ng if scope == "All" else warn)(f"{tag}: 走者の進め方 (advance) なし", "パイプラインの再生成が必要")
+        return
+    blocks = [("リーグ", L["advance"])] + [
+        (f"{t}/{side}", (d["teams"][t].get(side) or {}).get("advance"))
+        for t in sorted(teams) for side in ("offense", "defense")]
+    bad = []
+    for name, a in blocks:
+        if a is None:
+            bad.append(f"{name}: なし")
+            continue
+        f = a.get("fate")
+        if f:
+            if f["reached"] != f["scored"] + f["lob"] + f["outOnBase"]:
+                bad.append(f"{name}: 出塁{f['reached']}≠生還+残塁+塁上アウト")
+            if f["outOnBaseNonPlay"] > f["outOnBase"] or min(f.values()) < 0:
+                bad.append(f"{name}: 走者の行方に負/過大")
+        for k, sit in (a.get("situations") or {}).items():
+            if abs(sum(sit["c"]) - sit["n"]) > 0.5 + 0.002 * sit["n"] or min(sit["c"]) < 0:
+                bad.append(f"{name}: {k} 内訳の合計 {sum(sit['c']):.1f}≠{sit['n']}")
+                break
+        r = a.get("running") or {}
+        for key, num in (("score2", "scored"), ("score1", "scored"), ("dp", "dp")):
+            x = r.get(key) or {}
+            if x and not (0 <= x[num] <= x["n"] + 0.05):
+                bad.append(f"{name}: {key} {x[num]}/{x['n']}")
+        st = a.get("steals")
+        if st is not None and (st["teamGames"] <= 0 or st["sb"] < 0 or st["cs"] < 0):
+            bad.append(f"{name}: 盗塁 {st}")
+    lf = L["advance"].get("fate") or {}
+    excl = f" / 打席の記録が欠けたイニング {lf.get('excludedHalves', 0)} を除外" if lf else ""
+    if bad:
+        ng(f"{tag}: 走者の進め方の整合性", ", ".join(bad[:4]))
+    else:
+        ok(f"{tag}: 走者の進め方 (出塁 = 生還+残塁+塁上アウト / 場面別の内訳の合計 / 率の値域{excl})")
+    # 走者の行方の勘定: リーグの出塁 = 各大学の攻撃の出塁の合計 = 守備の合計
+    off = sum(((d["teams"][t].get("offense") or {}).get("advance") or {}).get("fate", {}).get("reached", 0) for t in teams)
+    dfn = sum(((d["teams"][t].get("defense") or {}).get("advance") or {}).get("fate", {}).get("reached", 0) for t in teams)
+    if lf and (abs(off - lf["reached"]) > max(2, 0.01 * lf["reached"]) or abs(dfn - lf["reached"]) > max(2, 0.01 * lf["reached"])):
+        ng(f"{tag}: 出塁の勘定が合わない", f"リーグ {lf['reached']} / 攻撃計 {off} / 守備計 {dfn}")
+    # 除外 = 3 アウトなのに打席が足りないイニング (原本の投球の欠落。2023 年 4 月の数試合で 2.9%)。
+    # 計算の不具合なら桁違いに増えるので 5% を超えたら知らせる
+    if lf and lf.get("halves") and lf["excludedHalves"] / (lf["halves"] + lf["excludedHalves"]) > 0.05:
+        warn(f"{tag}: 走者の行方から除外したイニングが多い (打席の欠落)", f"{lf['excludedHalves']}/{lf['halves']}")
+    # 盗塁は記録のある期間だけ: その年に記録が無ければ null でなければならない
+    rec_years = set(((d.get("method") or {}).get("reconstruction") or {}).get("sbRecordedFrom", {}) or {})
+    year = scope.split("_")[0]
+    if year.isdigit() and year not in rec_years and L["advance"].get("steals") is not None:
+        ng(f"{tag}: 盗塁の記録が無い年なのに盗塁を集計している", str(L["advance"]["steals"]))
 
 
 def check_asset_chunks(repo_root, html_refs):
