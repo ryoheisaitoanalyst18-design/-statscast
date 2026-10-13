@@ -85,12 +85,12 @@ if [ "$MODE" != "frontend-only" ]; then
 
   step "3/7 データ同期 → 公開リポジトリ"
   # 上位は --delete しない (defenseData等の手動ファイル保護)。
-  # teams/ と models/ はパイプライン完全所有なので --delete で残骸を残さない。
+  # teams/ と models/ と runexp/ はパイプライン完全所有なので --delete で残骸を残さない。
   # players/batter_zones はフロント未使用 (2026-07確認: ローダー定義のみ残存・
   # バンドル参照ゼロ) のため公開しない。パイプラインは生成し続けるが同期除外。
   rsync -a --exclude 'players/batter_zones' "$PIPELINE_DATA/" "$REPO_DIR/data/"
   # パイプライン完全所有のサブディレクトリは --delete で残骸 (姓名揺れの旧ファイル等) を掃除
-  for SUB in teams models players/batter_detail players/pitcher_detail; do
+  for SUB in teams models runexp players/batter_detail players/pitcher_detail; do
     [ -d "$PIPELINE_DATA/$SUB" ] && rsync -a --delete "$PIPELINE_DATA/$SUB/" "$REPO_DIR/data/$SUB/"
   done
   echo "データ同期完了"

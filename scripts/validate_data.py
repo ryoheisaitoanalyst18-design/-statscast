@@ -13,6 +13,7 @@
   - 結果球 (resultPitches) の構造・カウント値域・打席数整合
   - チーム傾向 (teams/) の構造
   - モデル (models/) の健全性: Stuff+平均≈100、xwOBA↔wOBAのリーグ整合、グリッド地形
+  - 得点期待値 (runexp/) の値域・アウトに対する単調性・得点の勘定・塁状況推定の品質
   - index.html / 404.html の参照アセット実在 + バンドルハッシュ一致 + noindex 保持
   - 公開除外物 (batter_zones/, dates_2026.json) がコミットされていないこと
 
@@ -554,6 +555,101 @@ def check_run_expectancy(data_dir):
         ok(f"run_expectancy.json: {games}試合・投手{len(rk)}人 (現データと一致)")
 
 
+def check_runexp(data_dir, scopes):
+    """得点期待値 (RE24・マルコフ・得点パターン) runexp/runexp_{scope}.json の健全性。
+
+    塁状況は TrackMan に無く base_state.py が推定しているので、推定が壊れた時に気づけるよう
+    値域・アウトに対する単調性・得点の勘定合わせ・推定品質 (矛盾イニング率/確信度/答え合わせ) を見る。"""
+    keys = [f"{o}-{s}" for o in range(3) for s in range(8)]
+    try:
+        meta = load(os.path.join(data_dir, "models", "models_meta.json"))
+        un = meta.get("unitNormalization", {})
+        total_games = un.get("imperial_games", 0) + un.get("metric_games", 0)
+    except Exception:
+        total_games = None
+    for scope in scopes:
+        path = os.path.join(data_dir, "runexp", f"runexp_{scope}.json")
+        if not os.path.exists(path):
+            (ng if scope == "All" else warn)(f"runexp_{scope}.json", "なし")
+            continue
+        try:
+            d = load(path)
+        except Exception as e:
+            ng(f"runexp_{scope}", f"パース不能: {e}")
+            continue
+        tag = f"runexp_{scope}"
+        L = d.get("league", {})
+        re24 = L.get("re24", {})
+        if sorted(re24) != sorted(keys):
+            ng(f"{tag}: 24状態の欠落/過剰", str(sorted(set(keys) ^ set(re24))[:5]))
+            continue
+        bad = []
+        for k, st in re24.items():
+            for f, lo, hi in (("re", 0, 4), ("reMarkov", 0, 4), ("p", 0, 1), ("pMarkov", 0, 1)):
+                if not in_range(st.get(f), lo, hi):
+                    bad.append(f"{k}.{f}={st.get(f)}")
+            for f in ("dist", "distMarkov"):
+                dist = st.get(f)
+                if dist is not None and abs(sum(dist) - 1) > 0.01:
+                    bad.append(f"{k}.{f} 合計{sum(dist):.3f}")
+        if bad:
+            ng(f"{tag}: 値域", ", ".join(bad[:4]))
+        else:
+            ok(f"{tag}: 24状態の値域 (RE 0-4 / 確率 0-1 / 分布の合計 1)")
+        teams = set(d.get("teams", {}))
+        if not teams <= VALID_TEAMS:
+            ng(f"{tag}: チーム名", str(teams - VALID_TEAMS))
+        # 得点の勘定: リーグの得点 = 各大学の攻撃の得点の合計 = 守備 (失点) の合計
+        runs = L.get("runs")
+        off = sum((d["teams"][t].get("offense") or {}).get("runs", 0) for t in teams)
+        dfn = sum((d["teams"][t].get("defense") or {}).get("runs", 0) for t in teams)
+        if runs is None or abs(off - runs) > max(2, 0.01 * runs) or abs(dfn - runs) > max(2, 0.01 * runs):
+            ng(f"{tag}: 得点の勘定が合わない", f"リーグ {runs} / 攻撃計 {off} / 失点計 {dfn}")
+        else:
+            ok(f"{tag}: 得点の勘定 (リーグ {runs} = 攻撃計 {off} = 失点計 {dfn})")
+        q = d.get("quality", {})
+        half = d.get("halfInnings") or 0
+        inv = q.get("invalidHalfInnings", 0)
+        if half and inv / half > 0.03:
+            ng(f"{tag}: 記録が矛盾するイニングが多い", f"{inv}/{half}")
+        elif half and inv / half > 0.015:
+            warn(f"{tag}: 記録が矛盾するイニング", f"{inv}/{half}")
+        mc = q.get("meanCertainty")
+        if mc is not None and mc < 0.85:
+            ng(f"{tag}: 塁状況の推定の確信度が低い", f"{mc}")
+        if scope != "All":
+            continue
+        # 全年度だけ: 野球として当然の形 (マルコフ) と既知値の目安
+        mk = {k: re24[k]["reMarkov"] for k in keys}
+        mono = [s for s in range(8) if not (mk[f"0-{s}"] > mk[f"1-{s}"] > mk[f"2-{s}"])]
+        if mono:
+            ng(f"{tag}: アウトが増えても得点期待値が下がらない塁状況", str(mono))
+        else:
+            ok(f"{tag}: どの塁状況でもアウトが増えると得点期待値が下がる (マルコフ)")
+        if not (0.3 <= mk["0-0"] <= 0.7):
+            ng(f"{tag}: 無死走者なしの得点期待値が常識外", f"{mk['0-0']}")
+        if not (mk["0-7"] > mk["0-1"] > mk["0-0"]):
+            ng(f"{tag}: 走者が増えても得点期待値が上がらない", f"{mk['0-0']}/{mk['0-1']}/{mk['0-7']}")
+        val = (d.get("method") or {}).get("validation") or {}
+        if val.get("mapAccuracy") is not None:
+            if val["mapAccuracy"] < 0.85:
+                ng(f"{tag}: 答え合わせ (Notes 手入力の試合) の一致率が低い", f"{val['mapAccuracy']}")
+            else:
+                ok(f"{tag}: 塁状況の答え合わせ 一致率 {val['mapAccuracy']} ({val.get('plateAppearances')}打席)")
+        gaps = []
+        for t in teams:
+            mko = (d["teams"][t].get("offense") or {}).get("markov") or {}
+            if mko.get("runsPer9") is not None and mko.get("actualRunsPer9") is not None \
+                    and abs(mko["runsPer9"] - mko["actualRunsPer9"]) > 0.3:
+                gaps.append(f"{t} {mko['runsPer9']}/{mko['actualRunsPer9']}")
+        if gaps:
+            ng(f"{tag}: マルコフモデルの9回あたり得点が実際と乖離", ", ".join(gaps))
+        else:
+            ok(f"{tag}: マルコフモデルの9回あたり得点 ≈ 実際 (全大学 ±0.3 以内)")
+        if total_games and d.get("games") != total_games:
+            ng(f"{tag} が古い", f"{d.get('games')}試合 (現データ {total_games}試合)")
+
+
 def check_asset_chunks(repo_root, html_refs):
     """main JS バンドルから動的 import される遅延チャンクが assets/ に実在するか (落とし穴① ⑦)。
 
@@ -963,6 +1059,7 @@ def main():
     check_competitions(data_dir)
     check_competitions_date_files(data_dir)
     check_run_expectancy(data_dir)
+    check_runexp(data_dir, ["All"] + numeric_years + list(competition_scopes_2026(data_dir)))
     check_defense_data(data_dir)
     check_video_links(data_dir)
     if not skip_html:
