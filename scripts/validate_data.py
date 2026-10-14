@@ -617,6 +617,11 @@ def check_runexp(data_dir, scopes):
         mc = q.get("meanCertainty")
         if mc is not None and mc < 0.85:
             ng(f"{tag}: 塁状況の推定の確信度が低い", f"{mc}")
+        # 幻の得点: 原本の RunsScored が前の球の値を引きずると 1 イニング数十点になる (2025-04-12 は 39 点)。
+        # 実際の最多は 12 点。超えたら原本を公式記録と照合し tokyo-baseball/data_integrity.BROKEN_RUN_RECORDS へ
+        mh = q.get("maxHalfRuns")
+        if mh is not None and mh > 15:
+            ng(f"{tag}: 1イニングの得点が多すぎる (幻の得点の疑い)", f"最多 {mh} 点")
         check_runexp_advance(tag, scope, d, teams)
         if scope != "All":
             continue
@@ -632,6 +637,13 @@ def check_runexp(data_dir, scopes):
         if not (mk["0-7"] > mk["0-1"] > mk["0-0"]):
             ng(f"{tag}: 走者が増えても得点期待値が上がらない", f"{mk['0-0']}/{mk['0-1']}/{mk['0-7']}")
         val = (d.get("method") or {}).get("validation") or {}
+        be = val.get("buntEmpty")
+        if be is None:
+            warn(f"{tag}: 犠打判定の答え合わせ (buntEmpty) なし", "パイプラインの再生成が必要")
+        elif be["hmmDisagree"]:
+            warn(f"{tag}: 走者なし確定で凡打にしたバントが塁状況の推定と食い違う", f"{be['hmmDisagree']}/{be['n']}")
+        else:
+            ok(f"{tag}: 走者なし確定で凡打にしたバント {be['n']} 打席は全て推定でも走者なし")
         if val.get("mapAccuracy") is not None:
             if val["mapAccuracy"] < 0.85:
                 ng(f"{tag}: 答え合わせ (Notes 手入力の試合) の一致率が低い", f"{val['mapAccuracy']}")
