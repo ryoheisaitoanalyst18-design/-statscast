@@ -15,7 +15,7 @@ export_video_links.py がそれを使って「クリップ内オフセット →
   python3 scripts/video/concat_game_video.py --dry-run        # 構成と尺だけ表示
 
 出力: OUT_DIR/{game_uid}.mp4 と OUT_DIR/{game_uid}.json (マニフェスト)
-      既定の OUT_DIR は ~/.diamondlab/videos/upload
+      既定の OUT_DIR は ~/.diamondlab/upload
 終了コード: 0=成功, 1=失敗あり
 """
 import argparse
@@ -30,7 +30,7 @@ import sys
 DB_PATH = os.environ.get(
     "WATSON1_DB", os.path.expanduser("~/.diamondlab/diamondlab.sqlite3"))
 OUT_DIR = os.environ.get(
-    "VIDEO_UPLOAD_DIR", os.path.expanduser("~/.diamondlab/videos/upload"))
+    "VIDEO_UPLOAD_DIR", os.path.expanduser("~/.diamondlab/upload"))
 
 # 連結後の実尺と積み上げ計算のズレをこの秒数まで許容する。
 # stream copy なので通常は 0.1 秒未満。超えたらオフセットが信用できない。

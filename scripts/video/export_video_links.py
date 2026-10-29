@@ -33,7 +33,7 @@ REPO = os.path.dirname(os.path.dirname(HERE))
 DB_PATH = os.environ.get(
     "WATSON1_DB", os.path.expanduser("~/.diamondlab/diamondlab.sqlite3"))
 MANIFEST_DIR = os.environ.get(
-    "VIDEO_UPLOAD_DIR", os.path.expanduser("~/.diamondlab/videos/upload"))
+    "VIDEO_UPLOAD_DIR", os.path.expanduser("~/.diamondlab/upload"))
 IDS_PATH = os.path.join(HERE, "youtube_ids.json")
 OUT_PATH = os.path.join(REPO, "data", "videos", "links.json")
 
@@ -83,6 +83,26 @@ def load_youtube_ids(placeholder: bool) -> dict:
     return {}
 
 
+
+def carry_over(prev, uid, video_id, games_out, pitches, batted, collisions):
+    """既存 links.json にある同じ試合・同じ動画IDの紐づけを新しい出力へ移す。"""
+    if not prev or not video_id:
+        return False
+    old = [i for i, g in enumerate(prev["games"])
+           if g["uid"] == uid and g["youtubeId"] == video_id]
+    if not old:
+        return False
+    oi, gi = old[0], len(games_out)
+    games_out.append(prev["games"][oi])
+    for src, dst, name in ((prev["pitches"], pitches, "球"),
+                           (prev["batted"], batted, "打球")):
+        for k, (i, t) in src.items():
+            if i == oi:
+                if k in dst:
+                    collisions.append(f"{name}キー重複: {k}")
+                dst[k] = [gi, t]
+    return True
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         description=__doc__,
@@ -99,6 +119,10 @@ def main() -> int:
     con.row_factory = sqlite3.Row
 
     yt = load_youtube_ids(args.placeholder)
+    prev = None
+    if os.path.exists(args.out):
+        with open(args.out, encoding="utf-8") as f:
+            prev = json.load(f)
     games_out, pitches, batted = [], {}, {}
     collisions, skipped = [], []
 
@@ -114,6 +138,11 @@ def main() -> int:
 
         manifest_path = os.path.join(MANIFEST_DIR, f"{uid}.json")
         if not os.path.exists(manifest_path):
+            # 公開済みの試合はマニフェストが消えても links.json から引き継ぐ
+            # (中間ファイルはアップ確認後に削除されるため。落とすとサイトからリンクが消える)
+            if carry_over(prev, uid, yt.get(uid), games_out, pitches, batted, collisions):
+                print(f"  ↻ {label}  公開済みの紐づけを既存 links.json から引き継ぎ")
+                continue
             skipped.append(f"{label}: 連結マニフェストが無い "
                            f"(concat_game_video.py を実行してください)")
             continue

@@ -39,7 +39,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.environ.get(
     "WATSON1_DB", os.path.expanduser("~/.diamondlab/diamondlab.sqlite3"))
 UPLOAD_DIR = os.environ.get(
-    "VIDEO_UPLOAD_DIR", os.path.expanduser("~/.diamondlab/videos/upload"))
+    "VIDEO_UPLOAD_DIR", os.path.expanduser("~/.diamondlab/upload"))
 IDS_JSON = os.path.join(HERE, "youtube_ids.json")
 LOCK_PATH = os.path.join(UPLOAD_DIR, ".batch_burn.lock")
 
@@ -165,6 +165,14 @@ def candidate_games(con: sqlite3.Connection, game_uid=None) -> list:
     return con.execute(sql, args).fetchall()
 
 
+def missing_clips(con: sqlite3.Connection, game_id: int) -> int:
+    """イニング別クリップのうちファイルが無い本数。消えた素材の試合を毎回「失敗」に
+    しないため、焼き込み対象から外して「素材なし」と表示する。"""
+    rows = con.execute("SELECT file_path FROM videos WHERE game_id = ? "
+                       "AND inning IS NOT NULL", (game_id,)).fetchall()
+    return sum(1 for (p,) in rows if not os.path.exists(p))
+
+
 def run(cmd: list, log_path: str) -> bool:
     """子プロセスを回し、出力をログに追記する。並列実行するので端末には出さない。"""
     with open(log_path, "a", encoding="utf-8") as log:
@@ -265,17 +273,19 @@ def main() -> int:
     targets = [g for g in games if g["game_uid"] not in done]
 
     print(f"紐づけ済み {len(games)} 試合 / うちアップ済み除外 {len(games) - len(targets)} 試合")
+    todo = []
     for g in targets:
         overlay = os.path.join(UPLOAD_DIR, f"{g['game_uid']}_overlay.mp4")
-        state = ("完成済み" if (not args.force and verify_mp4(
-            ffmpeg, overlay, expected_duration(g["game_uid"]))) else "要処理")
+        lost = missing_clips(con, g["id"])
+        if not args.force and verify_mp4(ffmpeg, overlay, expected_duration(g["game_uid"])):
+            state = "完成済み"
+        elif lost:
+            state = f"素材なし: クリップ {lost} 本のファイルが無い"
+        else:
+            state = "要処理"
+            todo.append(g)
         print(f"  [{state}] {g['date']} {g['away_team']} @ {g['home_team']}  "
               f"{g['game_uid']}  {g['n_pitches']}球")
-    todo = [g for g in targets
-            if args.force
-            or not verify_mp4(ffmpeg, os.path.join(
-                UPLOAD_DIR, f"{g['game_uid']}_overlay.mp4"),
-                expected_duration(g["game_uid"]))]
     if not todo:
         print("\n処理するものはありません。")
         return 0

@@ -28,7 +28,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.environ.get(
     "WATSON1_DB", os.path.expanduser("~/.diamondlab/diamondlab.sqlite3"))
 UPLOAD_DIR = os.environ.get(
-    "VIDEO_UPLOAD_DIR", os.path.expanduser("~/.diamondlab/videos/upload"))
+    "VIDEO_UPLOAD_DIR", os.path.expanduser("~/.diamondlab/upload"))
 FONTS_DIR = os.path.join(HERE, "fonts")
 # WSL から見える Windows のフォント。日本語が出せるものを優先順に探す
 WINDOWS_FONTS = [
