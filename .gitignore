@@ -23,3 +23,9 @@ data/dates_2026.json
 
 # cleanup_stale_details.py が生成するレポートファイル (ローカル実行ごとに変わる)
 scripts/cleanup_report_*.txt
+
+# YouTube アップロードの認証情報は ~/.config/statscast/ に置く (upload_youtube.py)。
+# update_and_deploy.sh は scripts/ を丸ごと git add するので、万一ここに置いても公開しない
+client_secret*.json
+*youtube_token*.json
+upload_state.json

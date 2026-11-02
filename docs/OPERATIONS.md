@@ -154,20 +154,50 @@ python3 scripts/cleanup_stale_details.py [DATA_DIR] --delete   # 実削除 (前�
 球のポップアップから YouTube の試合動画に飛ぶ機能。動画は**限定公開**でアップロードし、
 動画IDだけを公開データに載せる (動画実体はこのリポジトリに入れない)。
 
-**1試合の流れは一本道**。①→⑤の順に進める。人の手が要るのは②と④だけ。
+**1試合の流れは一本道**。①→⑤の順に進める。②〜⑤は `auto_pipeline.py` で無人で回せる
+(2026-10-29〜)。人の手が要るのは①と、初回だけの YouTube ログイン設定。
 
 ```
 DVD → ①rip_dvd.py → ②Watson1で紐づけ → ③batch_burn.py → ④YouTube → ⑤export+デプロイ
+                     └──────────── auto_pipeline.py が②〜⑤を順に実行 ────────────┘
 ```
+
+#### 自動 (auto_pipeline.py)
+
+```bash
+python3 scripts/video/auto_pipeline.py --videos-dir "/mnt/c/Users/<ユーザー名>/Documents/My Videos" --dry-run
+nohup python3 scripts/video/auto_pipeline.py --videos-dir "/mnt/c/Users/<ユーザー名>/Documents/My Videos" \
+  > ~/video_pipeline.log 2>&1 &          # 結果の要約は ~/video_pipeline_status.txt
+```
+
+- ② `~/diamondlab/auto_link_video.py`: 動画フォルダの未登録の動画ごとに、中継の球速表示
+  (例: 135km) を全編から拾って TrackMan と照合し、**どの試合の動画かを判定** (日付の前後1日の
+  試合のうち最もよく合うもの。一致50%未満・2位と僅差なら止める) → 全球を紐づけ → イニング別に
+  切り出し (`~/.diamondlab/clips/`)。基準球は不要。中継の録画は攻守交代で時間が数十秒ずつ欠ける
+  ことがある (10/7 は6回・計4分18秒) が、照合なので追従する。止まった動画は Watson1 の
+  ビデオページで基準球を打って「⚡残りを自動リンク」(ずれた半イニングの初球も打ち直す)。
+- ④ `upload_youtube.py`: 限定公開でアップ → YouTube 側の処理完了・限定公開・日本で再生可を
+  確かめてから `youtube_ids.json` に記入 (再生できないリンクをサイトに出さない)。
+  初回だけ Google Cloud の設定と `--auth` が要る (`upload_youtube.py --dry-run` 等で手順が出る)。
+  **認証情報は `~/.config/statscast/` に置く** (このリポジトリは公開で、`update_and_deploy.sh` は
+  scripts/ を丸ごと git add するため。.gitignore でも `client_secret*.json` 等を除外済み)。
+  OAuth 同意画面を「テスト」のままにすると 7 日でログインが切れる → 「本番環境」にする。
+  アップロードの API 枠は 2026-06 以降 1 日 100 本 (1本1単位の専用枠) で、未審査の
+  プロジェクトでも非公開に固定されない (公式ドキュメント videos.insert)。
+- 中間ファイルの出力先は `~/.diamondlab/upload/` (2026-10-29 に `~/.diamondlab/videos/upload/`
+  から移動。`videos/` は Watson1 の元動画置き場で書き込まない)。
+- 素材 (クリップ) のファイルが消えた試合は batch_burn.py が「素材なし」として飛ばす。
+
+#### 手動で1段ずつ
 
 ```bash
 # ① DVD を無劣化で吸い出す (5〜10分)。HandBrake は使わない (下記「DVD取り込み」参照)
 python3 scripts/video/rip_dvd.py --dry-run               # まず構成と暗号化の有無を確認
 python3 scripts/video/rip_dvd.py --name 20260912_法政明治  # → ~/.diamondlab/videos/
 
-# ② Watson1 (~/diamondlab) で: 動画を試合に登録 → アンカー1球を手動リンク
-#    → 「⚡残りを自動リンク」 → 「✂イニング別に切出し」
-#    手作業はここだけ。アンカーは試合につき1球でよい (残りは TrackMan の実時刻から逆算)。
+# ② Watson1 (~/diamondlab) で: 動画を試合に登録 → 「🎯球速表示で自動補正」(中継画面なら基準球不要)
+#    または アンカー1球を手動リンク → 「⚡残りを自動リンク」(途中からずれたら、ずれた半イニングの
+#    初球も手動リンクして再実行) → 「✂イニング別に切出し」。無人なら ~/diamondlab/auto_link_video.py
 
 # ③ 連結→焼き込み→検査を無人で回す (1試合21分、並列2)。試合の指定は不要 —
 #    紐づけ済みかつ未アップの試合を自動で全部拾う。中断しても再実行で続きから。
@@ -175,8 +205,8 @@ python3 scripts/video/batch_burn.py --dry-run            # 何が処理待ちか
 nohup python3 scripts/video/batch_burn.py > ~/batch_burn.log 2>&1 &
 tail -f ~/batch_burn.log
 
-# ④ ~/.diamondlab/videos/upload/{UID}_overlay.mp4 を YouTube に「限定公開」でアップロード
-#    → 動画IDを scripts/video/youtube_ids.json に記入
+# ④ python3 scripts/video/upload_youtube.py  (手で上げるなら ~/.diamondlab/upload/{UID}_overlay.mp4 を
+#    YouTube に「限定公開」でアップロード → 動画IDを scripts/video/youtube_ids.json に記入)
 
 # ⑤ サイトに反映
 python3 scripts/video/export_video_links.py              # → data/videos/links.json
