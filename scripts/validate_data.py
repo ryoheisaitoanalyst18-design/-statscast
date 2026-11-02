@@ -200,7 +200,34 @@ def check_year_data(data_dir, year):
             ok(f"{name}: リーグwOBA {lg:.3f}")
         else:
             ng(f"{name}: リーグwOBA異常", f"{lg:.3f}")
+    check_success_profiles(name, d)
     return d
+
+
+def check_success_profiles(name, d):
+    """成功モデル (上位15% vs 下位15%, パイプラインの compute_success_profiles) の整合。
+    2026-11-02 まで大会別ファイルは対象が足りていても空のまま出力されていた (画面は常に「サンプル数不足」)。
+    リーダーボードから対象人数を数え直し、meta の人数・表の有無と一致するかを見る。"""
+    sides = (("pitcher", "TBF", lambda r: r.get("Runs_against") is not None),
+             ("batter", "PA", lambda r: r.get("wOBA") is not None))
+    for side, basis, has_rank in sides:
+        meta, prof = d.get(f"{side}ProfileMeta"), d.get(f"{side}Profile") or []
+        if not meta:
+            ng(f"{name}: {side}ProfileMeta なし", "パイプラインが成功モデルを計算していない")
+            continue
+        q = sum(1 for r in d[f"{side}Leaderboard"]
+                if (r.get(basis) or 0) >= meta["minQualify"] and has_rank(r))
+        g = (q * meta["pct"] + 50) // 100
+        g = g if g >= meta["minGroup"] else 0
+        if (q, g) != (meta["qualified"], meta["group"]) or (len(prof) > 0) != (g > 0):
+            ng(f"{name}: 成功モデル ({side}) の人数が合わない",
+               f"数え直し 対象{q}人/各{g}人, meta {meta['qualified']}人/各{meta['group']}人, 表{len(prof)}行")
+            continue
+        woba = next((r for r in prof if r.get("Metric") == "wOBA"), None)
+        if woba is not None and not (woba.get("Difference") or 0) > 0:
+            ng(f"{name}: 成功モデル (batter) 上位の wOBA が下位以下", str(woba))
+            continue
+        ok(f"{name}: 成功モデル ({side}) 対象{q}人・各{g}人")
 
 
 def check_player_details(data_dir, year_doc):
