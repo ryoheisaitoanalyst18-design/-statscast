@@ -201,7 +201,35 @@ def check_year_data(data_dir, year):
         else:
             ng(f"{name}: リーグwOBA異常", f"{lg:.3f}")
     check_success_profiles(name, d)
+    check_pitch_correlation(name, d)
     return d
+
+
+def check_pitch_correlation(name, d):
+    """成功モデルの球種ボタン (球の特徴 × その球種の成績の相関, compute_pitch_correlations) の整合。
+    対象人数を pitcherByPitch (同じデータの球種別投手成績) から数え直し、相関の有無・値域を見る。"""
+    c = d.get("pitchCorrelation")
+    if not c:
+        ng(f"{name}: pitchCorrelation なし", "パイプラインが球種別の相関を計算していない")
+        return
+    bad = []
+    for pt, e in c.get("byPitch", {}).items():
+        n_bp = sum(1 for r in d.get("pitcherByPitch", {}).get(pt, [])
+                   if (r.get("TotalPitches") or 0) >= c["minPitches"])
+        if e["n"] != n_bp:
+            bad.append(f"{pt}: 対象{e['n']}人 ≠ pitcherByPitch で{c['minPitches']}球以上 {n_bp}人")
+        if ("cells" in e) != (e["n"] >= c["minPitchers"]):
+            bad.append(f"{pt}: 対象{e['n']}人なのに相関の有無が逆")
+        for row in e.get("cells", []):
+            for cell in row:
+                if cell["n"] > e["n"] or (cell["r"] is not None and not (
+                        -1 <= cell["r"] <= 1 and 0 <= cell["p"] <= 1 and cell["n"] >= c["minPitchers"])):
+                    bad.append(f"{pt}: セル異常 {cell}")
+    if bad:
+        ng(f"{name}: 球種別の相関", "; ".join(bad[:3]))
+    else:
+        shown = sum(1 for e in c["byPitch"].values() if "cells" in e)
+        ok(f"{name}: 球種別の相関 ({shown}/{len(c['byPitch'])} 球種を表示)")
 
 
 def check_success_profiles(name, d):
