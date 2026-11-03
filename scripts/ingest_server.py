@@ -324,6 +324,31 @@ def filtered_index(job: Job, q: dict[str, str]):
 # ============================================================
 # 実行
 # ============================================================
+WATSON_HOOK = Path.home() / "watson" / "engine" / "after_ingest.py"
+
+
+def run_watson_hook(job: Job) -> None:
+    """分析アプリ Watson への反映 (~/watson が無ければ何もしない)。
+    新しい試合を Watson1 に同期 → Watson の共有パッケージ (OneDrive) を更新 → 録画フォルダの新しい動画の
+    紐づけを裏で開始。失敗しても取り込み自体 (サイトの更新) は成功のまま。"""
+    if not WATSON_HOOK.exists():
+        return
+    job.log("")
+    job.log("━━━ 分析アプリ Watson に反映 ━━━")
+    try:
+        proc = subprocess.Popen(
+            [sys.executable, str(WATSON_HOOK)], cwd=str(WATSON_HOOK.parent),
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1,
+            env=dict(os.environ, PYTHONUNBUFFERED="1"))
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            job.log(line)
+        if proc.wait() != 0:
+            job.log("⚠ Watson への反映に失敗しました (サイトの更新は完了しています)")
+    except Exception as exc:  # noqa: BLE001
+        job.log(f"⚠ Watson への反映に失敗しました: {exc} (サイトの更新は完了しています)")
+
+
 def run_job(job: Job) -> None:
     global CURRENT
     job.state = "running"
@@ -377,6 +402,7 @@ def run_job(job: Job) -> None:
         job.log("")
         if code == 0:
             job.log("✅ 完了: 本番サイトに反映されました。")
+            run_watson_hook(job)
             job.state = "success"
         else:
             job.log(f"❌ 失敗 (exit {code})。上のログを確認してください。")

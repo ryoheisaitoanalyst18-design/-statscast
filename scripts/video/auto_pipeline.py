@@ -34,6 +34,9 @@ sys.path.insert(0, HERE)
 from batch_burn import IDS_JSON, UPLOAD_DIR  # noqa: E402
 
 WATSON1 = os.environ.get("WATSON1_DIR", os.path.expanduser("~/diamondlab"))
+# 分析アプリ Watson (~/watson) の共有フォルダ。あれば切り出しを直接そこへ書き、紐づけ後に共有パッケージを更新する
+WATSON_SHARE = os.environ.get("WATSON_SHARE", "/mnt/c/Users/81704/OneDrive/Watson")
+WATSON_PUBLISH = os.path.expanduser("~/watson/engine/publish.py")
 LINKS_JSON = os.path.join(REPO, "data", "videos", "links.json")
 STATUS_PATH = os.path.expanduser("~/video_pipeline_status.txt")
 LOCK_PATH = os.path.join(UPLOAD_DIR, ".auto_pipeline.lock")
@@ -186,10 +189,15 @@ def run_steps(args, summary: list[str]) -> None:
     py = sys.executable
     dry = ["--dry-run"] if args.dry_run else []
     if args.videos_dir:
+        watson = os.path.isdir(WATSON_SHARE) and os.path.exists(WATSON_PUBLISH)
+        clip_dir = ["--clip-dir", os.path.join(WATSON_SHARE, "clips")] if watson else []
         rc = step("1/4 紐づけ (Watson1)",
                   [py, os.path.join(WATSON1, "auto_link_video.py"),
-                   "--scan-dir", args.videos_dir] + dry, cwd=WATSON1)
+                   "--scan-dir", args.videos_dir] + clip_dir + dry, cwd=WATSON1)
         summary.append(f"紐づけ: {'OK' if rc == 0 else '判定できない動画あり (ログ参照)'}")
+        if watson and not args.dry_run:
+            rc = step("1/4 Watson の共有パッケージ", [py, WATSON_PUBLISH, "share"])
+            summary.append(f"Watson: {'共有パッケージ更新' if rc == 0 else '⚠ 共有パッケージの更新に失敗 (ログ参照)'}")
     rc = step("2/4 連結 → 焼き込み → 検査",
               [py, os.path.join(HERE, "batch_burn.py"), "--jobs", str(args.jobs)] + dry)
     summary.append(f"焼き込み: {'OK' if rc == 0 else '失敗あり (ログ参照)'}")
