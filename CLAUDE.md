@@ -80,6 +80,7 @@ QA 問題行 (打席合体/六大学外/破損) の赤線表示と絞り込み)�
 | `models/xwoba_{scope}.json` | xwOBA/xBA/xSLG (batters+pitchers) | 生JSON |
 | `models/xwoba_grid.json` / `models_meta.json` | ランドスケープ / 方法論・検証値 | 生JSON |
 | `run_expectancy.json` | Run Value ページ (RE行列・球種別/投手別 RV)。パイプライン (`compute_run_values_all`) が毎回生成 | 生JSON |
+| `runexp/runexp_{scope}.json` | 得点期待値 (RE24・マルコフ・得点パターン)。塁状況は TrackMan 未記録のため `base_state.py` が推定。パイプライン (`compute_run_values_all`) が毎回生成 | 生JSON |
 | `defenseData.json` | 守備分析 (ポジショニング CSV × 打球、1打球1件)。パイプライン (`build_defense_data.py`) が毎回生成 | 生JSON |
 | `videos/links.json` | 球↔試合動画 (YouTube限定公開) の紐づけ。任意・無くても動く | 生JSON |
 
