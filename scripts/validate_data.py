@@ -886,6 +886,53 @@ def check_competitions(data_dir):
             ng(name, f"dates が空 (league={len(league_dates)}, fresh={len(fresh_dates)})")
             continue
         ok(f"{name}: 構造確認 (cutoff={inner['cutoff']}, league={len(league_dates)}日, fresh={len(fresh_dates)}日)")
+        # 春季・秋季・フレッシュは重ならない (秋のフレッシュが秋季リーグ戦に混ざっていた, 2026-11-12 修正)、
+        # 春秋通算 = 春季 + 秋季
+        seen, dup = {}, []
+        for k in ("spring", "autumn", "fresh"):
+            for dt in inner.get(k, {}).get("dates", []):
+                if dt in seen:
+                    dup.append(f"{dt}: {seen[dt]}/{k}")
+                seen[dt] = k
+        afc = inner.get("autumnFreshCutoff")
+        late_autumn = [dt for dt in inner.get("autumn", {}).get("dates", []) if afc and dt >= afc]
+        if dup:
+            ng(f"{name}: 大会の日程が重複", f"{len(dup)}件 例: {dup[:3]}")
+        elif late_autumn:
+            ng(f"{name}: 秋のフレッシュ ({afc}〜) の日程が秋季リーグ戦に入っている", f"{late_autumn[:3]}")
+        elif "spring" in inner and "autumn" in inner:
+            want = sorted(set(inner["spring"]["dates"]) | set(inner["autumn"]["dates"]))
+            if sorted(league_dates) != want:
+                ng(f"{name}: 春秋通算が 春季+秋季 と一致しない", f"{len(league_dates)}日 vs {len(want)}日")
+            else:
+                ok(f"{name}: 春季・秋季・フレッシュは重ならず、春秋通算 = 春季+秋季")
+
+
+def check_league_averages(data_dir, scopes):
+    """league_averages.json (リーグ平均。投手詳細のアプローチアングルの比較基準) の存在・scope・値の範囲。"""
+    path = os.path.join(data_dir, "league_averages.json")
+    if not os.path.exists(path):
+        ng("league_averages.json", "なし (パイプラインの compute_league_averages_all が生成)")
+        return
+    try:
+        d = load(path)
+    except Exception as e:
+        ng("league_averages.json", f"パース不能: {e}")
+        return
+    sc = d.get("scopes", {})
+    missing = [s for s in scopes if s not in sc]
+    if missing:
+        ng("league_averages.json", f"scope 欠落: {missing}")
+        return
+    bad = [f"{s}/{pt}={a}" for s, v in sc.items() for pt, a in (v.get("vaa") or {}).items()
+           if not (-15 < a.get("mean", 0) < 0) or a.get("n", 0) < d.get("minPitches", 1)]
+    fb = (sc.get("All", {}).get("vaa") or {}).get("ストレート")
+    if bad:
+        ng("league_averages.json: VAA が範囲外 (-15〜0°) か球数不足", f"{len(bad)}件 例: {bad[:3]}")
+    elif not fb:
+        ng("league_averages.json", "全年度のストレートの VAA が無い")
+    else:
+        ok(f"league_averages.json: {len(sc)} scope / 全年度ストレート VAA {fb['mean']}° (n={fb['n']})")
 
 
 def check_orphaned_assets(repo_root):
@@ -1179,6 +1226,7 @@ def main():
     for scope in competition_scopes_2026(data_dir):
         check_tendencies(data_dir, scope)
     check_models(data_dir)
+    check_league_averages(data_dir, ["All"] + numeric_years + list(competition_scopes_2026(data_dir)))
     check_competitions(data_dir)
     check_competitions_date_files(data_dir)
     check_run_expectancy(data_dir)
