@@ -887,9 +887,10 @@ def check_competitions(data_dir):
             continue
         ok(f"{name}: 構造確認 (cutoff={inner['cutoff']}, league={len(league_dates)}日, fresh={len(fresh_dates)}日)")
         # 春季・秋季・フレッシュは重ならない (秋のフレッシュが秋季リーグ戦に混ざっていた, 2026-11-12 修正)、
-        # 春秋通算 = 春季 + 秋季
+        # 春秋通算 = 春季 + 秋季。フレッシュも 春 / 秋 / 春秋通算 に分かれる (2026-11-14)。
+        split_fresh = "fresh_spring" in inner or "fresh_autumn" in inner
         seen, dup = {}, []
-        for k in ("spring", "autumn", "fresh"):
+        for k in (("spring", "autumn", "fresh_spring", "fresh_autumn") if split_fresh else ("spring", "autumn", "fresh")):
             for dt in inner.get(k, {}).get("dates", []):
                 if dt in seen:
                     dup.append(f"{dt}: {seen[dt]}/{k}")
@@ -906,6 +907,17 @@ def check_competitions(data_dir):
                 ng(f"{name}: 春秋通算が 春季+秋季 と一致しない", f"{len(league_dates)}日 vs {len(want)}日")
             else:
                 ok(f"{name}: 春季・秋季・フレッシュは重ならず、春秋通算 = 春季+秋季")
+        if split_fresh:
+            fs = inner.get("fresh_spring", {}).get("dates", [])
+            fa = inner.get("fresh_autumn", {}).get("dates", [])
+            misplaced = [dt for dt in fs if afc and dt >= afc] + [dt for dt in fa if afc and dt < afc]
+            if sorted(fresh_dates) != sorted(set(fs) | set(fa)):
+                ng(f"{name}: フレッシュ通算が 春季フレッシュ+秋季フレッシュ と一致しない",
+                   f"{len(fresh_dates)}日 vs {len(set(fs) | set(fa))}日")
+            elif misplaced:
+                ng(f"{name}: フレッシュの春秋が {afc} で分かれていない", f"{misplaced[:3]}")
+            else:
+                ok(f"{name}: フレッシュ通算 = 春季フレッシュ({len(fs)}日)+秋季フレッシュ({len(fa)}日)")
 
 
 def check_league_averages(data_dir, scopes):
