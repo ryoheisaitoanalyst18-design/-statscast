@@ -141,7 +141,7 @@ python3 scripts/cleanup_stale_details.py [DATA_DIR] --delete   # 実削除 (前�
 ### 得点期待値 (data/runexp/) — 塁状況は推定値
 
 「得点期待値」タブ (RE24・マルコフ連鎖・得点パターン) のデータ。`runexp_{scope}.json` (scope = All / 年度 /
-2026_{autumn,spring,league,fresh}) はパイプラインの `compute_run_expectancy.py` が毎回生成し、
+2026_{autumn,spring,league,fresh_autumn,fresh_spring,fresh}) はパイプラインの `compute_run_expectancy.py` が毎回生成し、
 デプロイ時に `--delete` 付きで同期する (teams/ models/ と同じくパイプライン完全所有)。
 
 - TrackMan は走者を記録しないので、塁状況はパイプラインの `base_state.py` が打席結果・得点・アウトから
