@@ -73,7 +73,8 @@ QA 問題行 (打席合体/六大学外/破損) の赤線表示と絞り込み)�
 | `yearData_{year}.json` | 年度別リーダーボード+チーム集計 | tRPCラップ (`[{result:{data:{json:…}}}]`) |
 | `yearData_2026_{autumn,spring,league,fresh_autumn,fresh_spring,fresh}.json` | 2026大会別 (リーグ戦: 春季 〜6/1・秋季 9/1〜11/9・春秋通算 / フレッシュ: 春季 6/2〜・秋季 11/10〜・春秋通算) | tRPCラップ |
 | `yearData_2026_YYYY-MM-DD.json` | 日別 (日付フィルタで使用中、消さない) | tRPCラップ |
-| `competitions_2026.json` | 2026年の大会区分定義 (区切りの日付・大会ごとの日程) | tRPCラップ |
+| `competitions_{2024,2025,2026}.json` | 年度ごとの大会区分定義 (大会ごとの日程。2026 は区切りの日付も持つ) | tRPCラップ |
+| `yearData_{2024,2025}_{大会}.json` | 2024・2025 の大会別 (2026 と同じキー。日程の無い区分は無い = 2025 の fresh_spring)。日別ファイルは 2026 だけ | tRPCラップ |
 | `league_averages.json` | リーグ平均 (scope 別の球種別 VAA)。投手詳細のアプローチアングルの比較基準 | 生JSON |
 | `players/{batter,pitcher}_detail/` | 選手詳細 (名前.json)。`resultPitches` = 結果球 (打席を決着させた1球。2ストライク後ビューはその strikes==2 部分集合) | 生JSON |
 | `teams/tendencies_{scope}.json` | チーム傾向 (ゾーン/カウント/強み弱み) | 生JSON |

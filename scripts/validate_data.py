@@ -641,6 +641,10 @@ def check_runexp(data_dir, scopes):
         bad = []
         for k, st in re24.items():
             for f, lo, hi in (("re", 0, 4), ("reMarkov", 0, 4), ("p", 0, 1), ("pMarkov", 0, 1)):
+                # 実測 RE の上限は画面に出る状態だけで見る: 標本 10 打席未満の実測は画面で「—」
+                # (フロントの MIN_SHOW)。小さい大会 (2024_autumn など) は 1〜2 打席の状態が 4 点を超えうる
+                if f == "re" and (st.get("n") or 0) < 10:
+                    hi = float("inf")
                 if not in_range(st.get(f), lo, hi):
                     bad.append(f"{k}.{f}={st.get(f)}")
             for f in ("dist", "distMarkov"):
@@ -842,19 +846,22 @@ def check_html(repo_root):
 
 
 def competition_scopes_2026(data_dir):
-    """competitions_2026.json から 2026 の大会スコープ名 (2026_autumn 等) を読む。
-    大会区分はシーズン進行で増えるので、検証側もハードコードせず実データに従う。"""
-    path = os.path.join(data_dir, "competitions_2026.json")
-    if not os.path.exists(path):
-        return []
-    try:
-        inner = unwrap(load(path))
-    except Exception:
-        return []
-    order = inner.get("order")
-    if not order:
-        order = [k for k, v in inner.items() if isinstance(v, dict) and "dates" in v]
-    return [f"2026_{k}" for k in order]
+    """competitions_<年度>.json から大会スコープ名 (2026_autumn, 2024_spring 等) を読む。
+    大会区分はシーズン進行で増え、年度も増える (2024・2025 は 2026-11-15 追加) ので、
+    検証側もハードコードせず実データに従う。名前は互換のため据え置き。"""
+    import glob as _glob
+    scopes = []
+    for path in sorted(_glob.glob(os.path.join(data_dir, "competitions_*.json"))):
+        year = os.path.basename(path)[len("competitions_"):-len(".json")]
+        try:
+            inner = unwrap(load(path))
+        except Exception:
+            continue
+        order = inner.get("order")
+        if not order:
+            order = [k for k, v in inner.items() if isinstance(v, dict) and "dates" in v]
+        scopes += [f"{year}_{k}" for k in order]
+    return scopes
 
 
 def check_competitions(data_dir):
@@ -876,7 +883,9 @@ def check_competitions(data_dir):
         except Exception as e:
             ng(name, f"tRPCアンラップ失敗: {e}")
             continue
-        missing = [k for k in ("cutoff", "league", "fresh") if k not in inner]
+        # cutoff (春のフレッシュ開始日) は 2026 だけが持つ。他の年度は日程のリストだけ
+        required = ("cutoff", "league", "fresh") if name == "competitions_2026.json" else ("league", "fresh")
+        missing = [k for k in required if k not in inner]
         if missing:
             ng(name, f"キー欠落: {missing}")
             continue
@@ -885,7 +894,20 @@ def check_competitions(data_dir):
         if not league_dates or not fresh_dates:
             ng(name, f"dates が空 (league={len(league_dates)}, fresh={len(fresh_dates)})")
             continue
-        ok(f"{name}: 構造確認 (cutoff={inner['cutoff']}, league={len(league_dates)}日, fresh={len(fresh_dates)}日)")
+        ok(f"{name}: 構造確認 (cutoff={inner.get('cutoff', '-')}, league={len(league_dates)}日, fresh={len(fresh_dates)}日)")
+        year = name[len("competitions_"):-len(".json")]
+        order = inner.get("order", [])
+        no_file = [k for k in order if not os.path.exists(os.path.join(data_dir, f"yearData_{year}_{k}.json"))]
+        wrong_year = [dt for k in order for dt in inner.get(k, {}).get("dates", []) if not dt.startswith(year + "-")]
+        empty = [k for k in order if not inner.get(k, {}).get("dates")] if year != "2026" else []
+        if no_file:
+            ng(f"{name}: 大会別 yearData 欠落", f"{no_file}")
+        elif wrong_year:
+            ng(f"{name}: 別の年度の日程が入っている", f"{wrong_year[:3]}")
+        elif empty:
+            ng(f"{name}: 日程の無い大会が order にある", f"{empty}")
+        else:
+            ok(f"{name}: order の {len(order)} 大会すべてに yearData があり、日程は {year} 年")
         # 春季・秋季・フレッシュは重ならない (秋のフレッシュが秋季リーグ戦に混ざっていた, 2026-11-12 修正)、
         # 春秋通算 = 春季 + 秋季。フレッシュも 春 / 秋 / 春秋通算 に分かれる (2026-11-14)。
         split_fresh = "fresh_spring" in inner or "fresh_autumn" in inner
