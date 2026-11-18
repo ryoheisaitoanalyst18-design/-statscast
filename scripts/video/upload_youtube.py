@@ -53,6 +53,10 @@ SCOPES = ["https://www.googleapis.com/auth/youtube.upload",
 AUTH_PORT = 8790          # ingest.sh=8787 / approve.sh=8788 と別
 CHUNK = 32 * 1024 * 1024  # 途切れても 32MB 単位でやり直せる
 RETRY_STATUS = {500, 502, 503, 504}
+# アップロードから これ以上たっても YouTube の処理が始まらない動画は、途中で切れたアップロードの残骸とみなす
+# (2026-10-30 に回線切れで中断した 10/25 東大-法政の動画が uploadStatus=uploaded のまま止まり、
+#  毎晩 90 分待ち続けていた)。残骸は使わずにアップし直す
+STALE_HOURS = 24
 MAX_RETRY = 10
 
 SETUP_HELP = f"""\
@@ -222,8 +226,21 @@ def targets(game_uid: str | None) -> list[str]:
 
 
 # ---------------------------------------------------------------- アップロード
+def _age_hours(iso: str | None) -> float:
+    """ISO 時刻 (YouTube の publishedAt / state の uploaded_at) から今までの時間。読めなければ 0."""
+    if not iso:
+        return 0.0
+    try:
+        t = dt.datetime.fromisoformat(iso.replace("Z", "+00:00"))
+    except ValueError:
+        return 0.0
+    now = dt.datetime.now(t.tzinfo) if t.tzinfo else dt.datetime.now()
+    return (now - t).total_seconds() / 3600
+
+
 def find_existing(yt, title: str) -> str | None:
-    """チャンネルの最近のアップロードに同じタイトルがあればその ID (二重アップ防止)."""
+    """チャンネルの最近のアップロードに同じタイトルがあればその ID (二重アップ防止)。
+    途中で切れたアップロードの残骸 (STALE_HOURS たっても処理が始まらない) は使わない."""
     ch = yt.channels().list(part="contentDetails", mine=True).execute().get("items", [])
     if not ch:
         return None
@@ -231,8 +248,15 @@ def find_existing(yt, title: str) -> str | None:
     items = yt.playlistItems().list(part="snippet", playlistId=uploads,
                                     maxResults=50).execute().get("items", [])
     for it in items:
-        if it["snippet"]["title"] == title:
-            return it["snippet"]["resourceId"]["videoId"]
+        if it["snippet"]["title"] != title:
+            continue
+        vid = it["snippet"]["resourceId"]["videoId"]
+        status, _ = check(yt, vid)
+        if status == "processing" and _age_hours(it["snippet"].get("publishedAt")) >= STALE_HOURS:
+            print(f"    同じタイトルの動画 {vid} は途中で切れたアップロードの残骸なので使わない "
+                  f"(YouTube Studio で削除してください)")
+            continue
+        return vid
     return None
 
 
@@ -368,6 +392,17 @@ def main() -> int:
 
     failed = []
     for uid in todo:
+        s = state.get(uid, {})
+        if s.get("id") and s.get("status") == "processing" and _age_hours(s.get("uploaded_at")) >= STALE_HOURS:
+            try:
+                still, _ = check(yt, s["id"])
+            except Exception:  # noqa: BLE001  確認できないときは従来どおり処理待ちとして扱う
+                still = "unknown"
+            if still == "processing":
+                print(f"\n■ {uid}: 動画 {s['id']} は {STALE_HOURS} 時間以上 YouTube の処理が始まらない "
+                      f"(途中で切れたアップロードの残骸)。アップし直します (古い動画は YouTube Studio で削除してください)")
+                state[uid] = {"status": "stale", "stale_id": s["id"], "title": s.get("title")}
+                _save_json(STATE_PATH, state)
         if state.get(uid, {}).get("id"):
             continue
         path = os.path.join(UPLOAD_DIR, f"{uid}_overlay.mp4")
@@ -400,7 +435,21 @@ def main() -> int:
     while pending:
         for uid in list(pending):
             vid = state[uid]["id"]
-            status, msg = check(yt, vid)
+            try:
+                status, msg = check(yt, vid)
+            except Exception as e:  # noqa: BLE001  通信の一時的な失敗 (2026-11-16 は読み取りタイムアウトで落ちた)
+                print(f"  {uid}: 状態の確認に失敗 ({type(e).__name__}) — 次の確認で再試行", flush=True)
+                continue
+            if status == "processing" and _age_hours(state[uid].get("uploaded_at")) >= STALE_HOURS:
+                # 途中で切れたアップロードの残骸。ID を外して次回アップし直す (残骸は YouTube Studio で削除)
+                pending.remove(uid)
+                state[uid] = {"status": "stale", "stale_id": vid, "title": state[uid].get("title"),
+                              "message": f"{STALE_HOURS} 時間たっても YouTube の処理が始まらない "
+                                         "(途中で切れたアップロード)。次回アップし直す"}
+                _save_json(STATE_PATH, state)
+                failed.append((uid, f"動画 {vid} は途中で切れたアップロードの残骸。次回アップし直します "
+                                    "(古い動画は YouTube Studio で削除してください)"))
+                continue
             if status == "processing":
                 continue
             pending.remove(uid)

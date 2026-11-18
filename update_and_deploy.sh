@@ -16,6 +16,9 @@
 #   4. index.html と 404.html の「両方」のハッシュを差し替え (404はSPAフォールバック)
 #   5. noindex メタの保持を検証 (意図的な検索非掲載設定。消えていたら中断)
 #   6. 参照アセットの実在検証 → commit → push → Actions完了待ち → 本番URL 200確認
+#   7. 同時に 1 本だけ実行 (取り込み画面と夜間の動画パイプラインが重なっても順番待ち)
+#   8. この commit の Actions が 1 本でも失敗したら失敗で終わる (データだけの更新でも)
+#   9. マスターの自動バックアップは新しい 10 本 + 月ごとの 1 本だけ残す (scripts/prune_master_backups.py)
 # ============================================================
 set -euo pipefail
 
@@ -44,6 +47,16 @@ fi
 
 step() { echo ""; echo "━━━ $1 ━━━"; }
 
+# 同時実行の防止: 取り込み (ingest.sh) と夜間の動画パイプライン (--data-only) が同時に走ると、
+# 片方の再生成中にもう片方がデータを同期・push しうる。後から来た方は前の実行が終わるまで待つ
+LOCK_FILE="${STATSCAST_DEPLOY_LOCK:-$HOME/.cache/statscast_deploy.lock}"
+mkdir -p "$(dirname "$LOCK_FILE")"
+exec 9>"$LOCK_FILE"
+if ! flock -n 9; then
+  echo "別の update_and_deploy.sh が実行中。終わるまで待ちます (最大 60 分)..."
+  flock -w 3600 9 || { echo "エラー: 60 分待っても前の実行が終わらない ($LOCK_FILE)"; exit 1; }
+fi
+
 # ============================================================
 step "0/7 プリフライト: リモート同期確認"
 # ============================================================
@@ -58,8 +71,14 @@ if [ "$BEHIND" -gt 0 ]; then
     echo "手動で対処してから再実行: git stash → git merge --ff-only origin/main → git stash pop"
     exit 1
   fi
-  git merge --ff-only origin/main
-  echo "origin/main へ fast-forward 完了"
+  if [ "$AHEAD" -gt 0 ]; then
+    # 手元の commit (スクリプト・docs の修正など) とリモート (PR のマージ等) の両方が進んでいる → 手元を上に積み直す
+    git rebase origin/main || { git rebase --abort; echo "エラー: origin/main への積み直しで衝突。手で解消してから再実行"; exit 1; }
+    echo "origin/main の上に手元の $AHEAD commit を積み直し完了"
+  else
+    git merge --ff-only origin/main
+    echo "origin/main へ fast-forward 完了"
+  fi
 fi
 
 # ============================================================
@@ -70,6 +89,7 @@ if [ "$MODE" = "csv" ] || [ "$MODE" = "regenerate" ]; then
     BACKUP="${MASTER_CSV%.csv}.backup_$(date +%Y%m%d_%H%M%S).csv"
     cp "$MASTER_CSV" "$BACKUP"
     echo "マスターCSVバックアップ: $BACKUP"
+    python3 "$REPO_DIR/scripts/prune_master_backups.py" --delete || echo "(古いバックアップの間引きに失敗。取り込みは続行)"
     python3 "$PIPELINE/update_season.py" "$CSV_PATH" $CLEAN
   else
     python3 "$PIPELINE/update_season.py" --regenerate
@@ -149,30 +169,36 @@ Update site data and assets ($MODE, $(date +%Y-%m-%d))
 - Passed validate_data.py gate ($(date +%H:%M)).
 EOF
 )"
-PREV_RID=$(command -v gh >/dev/null && gh run list --limit 1 --json databaseId -q '.[0].databaseId' 2>/dev/null || echo "")
+SHA=$(git rev-parse HEAD)
 git push origin main
-echo "push 完了。GitHub Actions を待機..."
+echo "push 完了。この commit の GitHub Actions を待機..."
 
 if command -v gh >/dev/null; then
-  # push 直後は新しい run がまだ登録されていないことがある。直前の run を拾うと
-  # 「前回の成功」を見て配信切替前に URL を確認し、偽の失敗/成功になる (2026-09-29 実例)。
-  RID=""
+  # この commit の run だけを見る (直前の run を拾うと「前回の成功」を見て偽の成功/失敗になる。2026-09-29 実例)。
+  # Pages は deploy.yml と pages-build-deployment の 2 本が走るので、全部の完了を待って 1 本でも失敗なら止める
+  # (以前は結論を表示するだけで、データだけの更新では失敗しても「デプロイ完了」と出ていた)
+  RUNS=""
   for i in $(seq 1 30); do
-    RID=$(gh run list --limit 1 --json databaseId -q '.[0].databaseId' 2>/dev/null || echo "")
-    [ -n "$RID" ] && [ "$RID" != "$PREV_RID" ] && break
+    RUNS=$(gh run list --commit "$SHA" --json databaseId -q '.[].databaseId' 2>/dev/null || echo "")
+    [ -n "$RUNS" ] && break
     sleep 5
   done
+  [ -n "$RUNS" ] || { echo "エラー: この commit ($SHA) の Actions が 150 秒たっても始まらない"; exit 1; }
   for i in $(seq 1 60); do
-    STATUS=$(gh run view "$RID" --json status -q .status 2>/dev/null || echo "")
-    [ "$STATUS" = "completed" ] && break
+    PENDING=$(gh run list --commit "$SHA" --json status -q '[.[] | select(.status != "completed")] | length' 2>/dev/null || echo 1)
+    [ "$PENDING" = "0" ] && break
     sleep 10
   done
-  echo "Actions: $(gh run view "$RID" --json conclusion -q .conclusion 2>/dev/null || echo '不明')"
+  gh run list --commit "$SHA" --json name,conclusion -q '.[] | "  Actions: \(.name) → \(.conclusion)"' 2>/dev/null || true
+  FAILED=$(gh run list --commit "$SHA" --json conclusion -q '[.[] | select(.conclusion != "success")] | length' 2>/dev/null || echo 1)
+  [ "$FAILED" = "0" ] || { echo "エラー: GitHub Actions が成功していない (gh run list --commit $SHA で確認)"; exit 1; }
+
   CURR_JS=$(grep -o 'index-[A-Za-z0-9_-]*\.js' index.html | head -1)
-  # Pages の配信切替は Actions 完了から数十秒遅れることがあるので、新バンドルが出るまで最大3分待つ
+  # Pages の配信切替は Actions 完了から数十秒遅れることがあるので、新バンドルが出るまで最大3分待つ。
+  # ?v=<commit> を付けて CDN のキャッシュを避ける
   LIVE_JS=""
   for i in $(seq 1 18); do
-    LIVE_JS=$(curl -s --max-time 15 "$LIVE_BASE/" | grep -o 'index-[A-Za-z0-9_-]*\.js' | head -1)
+    LIVE_JS=$(curl -s --max-time 15 "$LIVE_BASE/?v=$SHA" | grep -o 'index-[A-Za-z0-9_-]*\.js' | head -1)
     [ "$LIVE_JS" = "$CURR_JS" ] && break
     sleep 10
   done
@@ -183,6 +209,19 @@ if command -v gh >/dev/null; then
   done
   [ "$LIVE_JS" = "$CURR_JS" ] && echo "✅ 本番が新バンドル ($LIVE_JS) を配信中" \
     || { echo "エラー: 本番JS不一致 live=$LIVE_JS expected=$CURR_JS"; exit 1; }
+  # データの更新が本番に出たか: この commit で変わったデータを 1 本、中身で照合する
+  DATA_FILE=$(git diff --name-only HEAD~1 HEAD -- data | grep '\.json$' | head -1 || true)
+  if [ -n "$DATA_FILE" ]; then
+    WANT=$(sha256sum "$DATA_FILE" | cut -c1-16)
+    GOT=""
+    for i in $(seq 1 18); do
+      GOT=$(curl -s --max-time 30 "$LIVE_BASE/$(python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(sys.argv[1]))' "$DATA_FILE")?v=$SHA" | sha256sum | cut -c1-16)
+      [ "$GOT" = "$WANT" ] && break
+      sleep 10
+    done
+    [ "$GOT" = "$WANT" ] && echo "✅ 本番のデータも更新済み ($DATA_FILE)" \
+      || { echo "エラー: 本番のデータが古いまま ($DATA_FILE)"; exit 1; }
+  fi
 else
   echo "gh CLI なし: 1-2分後に $LIVE_BASE を手動確認してください"
 fi

@@ -82,7 +82,8 @@ QA 問題行 (打席合体/六大学外/破損) の赤線表示と絞り込み)�
 | `models/xwoba_{scope}.json` | xwOBA/xBA/xSLG (batters+pitchers) | 生JSON |
 | `models/xwoba_grid.json` / `models_meta.json` | ランドスケープ / 方法論・検証値 | 生JSON |
 | `run_expectancy.json` | Run Value ページ (RE行列・球種別/投手別 RV)。パイプライン (`compute_run_values_all`) が毎回生成 | 生JSON |
-| `defenseData.json` | 守備分析 (ポジショニング CSV × 打球、1打球1件)。パイプライン (`build_defense_data.py`) が毎回生成 | 生JSON |
+| `runexp/runexp_{scope}.json` | 得点期待値 (RE24・マルコフ・得点パターン・大学別レポート)。塁状況は TrackMan に無いため `base_state.py` が推定。パイプライン (`compute_run_expectancy_all`) が毎回生成 | 生JSON |
+| `defenseData.json` | 守備分析 (ポジショニング CSV × 打球、1打球1件)。パイプライン (`build_defense_data.py`) が毎回生成。PitchUID・GameUID・選手 ID は載せない (検証ゲートが FAIL) | 生JSON |
 | `videos/links.json` | 球↔試合動画 (YouTube限定公開) の紐づけ。任意・無くても動く | 生JSON |
 
 `players/batter_zones/` と `dates_2026.json` はフロント未使用のため公開しない
@@ -96,6 +97,10 @@ QA 問題行 (打席合体/六大学外/破損) の赤線表示と絞り込み)�
   update_and_deploy.sh (バックアップ+--clean) 経由で。
 - 詳細な運用メモ・事故履歴・復旧手順は `docs/OPERATIONS.md` にある (落とし穴①〜⑧)。
 - 残骸の掃除: `python3 scripts/cleanup_stale_details.py` (dry-run 既定、`--delete` で実削除)。
+- `update_and_deploy.sh` は同時に 1 本だけ動く (`~/.cache/statscast_deploy.lock`。取り込みと夜間の動画パイプラインが
+  重なると後の方が待つ)。この commit の Actions が 1 本でも失敗すると失敗で終わる。取り込みのたびに
+  `scripts/prune_master_backups.py` がマスターの自動バックアップを「新しい 10 本 + 月ごとに 1 本」に間引く
+  (手で名前を付けたバックアップは消さない)。
 - 試合動画の紐づけ (`scripts/video/`) は Watson1 のタグ付け結果が入力。手順と落とし穴は
   `docs/OPERATIONS.md` の「試合動画の紐づけ」を読むこと。**動画実体はこのリポジトリに置かない**
   (YouTube 限定公開に上げて動画IDだけ載せる)。

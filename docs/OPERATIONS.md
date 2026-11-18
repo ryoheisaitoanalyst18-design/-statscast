@@ -7,7 +7,7 @@ CLAUDE.md の「絶対に守ること」の**根拠と復旧手順**をリポジ
 ## 大原則
 
 - 変更は必ず `./update_and_deploy.sh` 経由。手作業での assets/ 差し替え・data/ 直編集はしない。
-- 何か変えたら必ず `python3 scripts/validate_data.py`。**基準は「FAIL 0 / WARN は既知の 2 行のみ」** (詳細は下記「検証ゲート」)。
+- 何か変えたら必ず `python3 scripts/validate_data.py`。**基準は「FAIL 0 / WARN は下記「検証ゲート」の既知の内訳どおり」**。
 - main への push = 本番デプロイ (GitHub Pages)。push する前に必ず fetch する。
 
 ## 落とし穴カタログ
@@ -86,11 +86,13 @@ index.html / 404.html の `<meta name="robots" content="noindex, nofollow">` は
 
 - **チェック件数はデータ依存で可変** (年度数・日別ファイル数・モデル有無で増減する)。
   「以前は 61 件だった」という件数比較に意味はなく、基準は常に **FAIL 0**。
-- **既知の継続 WARN は 1 本**。上流 CSV に実在する記録ミスが原因で、このリポジトリ単体では
+- **既知の継続 WARN は 2 本** (2026-11-18 時点)。上流 CSV に実在する記録ミスが原因で、このリポジトリ単体では
   修正できない。デプロイを止めない既知事項として扱う。
   - 結果球: カウント域外 **1 球** (例: 投手 Takahashi, Koki の 3-3)。
-  つまり **WARN 1 行 (この内訳どおり) なら正常**。行が増えた・別ファイルで WARN が
-  出た・球数が増えた場合は改めて調査する。
+  - `runexp_2024_fresh_autumn`: 記録が矛盾するイニング **3/149** (2024 秋季フレッシュは試合数が少なく、
+    全体では 0.5% の矛盾イニングの割合が高く見える。2026-11-15 に大会区分を 2024 へ広げてから出る)。
+  つまり **WARN 2 行 (この内訳どおり) なら正常**。行が増えた・別ファイルで WARN が
+  出た・球数や件数が増えた場合は改めて調査する。
 - 以前の既知 WARN だった `run_expectancy.json` の「想定外の状態キー」(負のボール/ストライク数) は
   2026-09-29 の監査以降は出ておらず、チェックは **FAIL** に変更済み。今これが出たら既知事項ではなく異常。
 - **大会の開幕直後だけ出る WARN**: `xwoba_<scope>.json  batters が空`。パイプラインの
@@ -116,6 +118,9 @@ python3 scripts/cleanup_stale_details.py [DATA_DIR] --delete   # 実削除 (前�
 
 正解集合は「全 yearData_*.json のリーダーボード名の和集合」。選手 JSON を調査するときも
 必ずリーダーボード名から辿ること (ディレクトリ全走査は残骸に惑わされる)。
+
+**2026-11-18 からパイプラインが自動で消す**: `compute_player_details` は毎回全選手を書き直し、今回書かなかった
+ファイル (表記が変わる前の名前) を消す (`remove_stale_detail_files`)。下の手順は自動化前の残骸を調べるとき用。
 
 **重要: 必ずパイプライン出力側 (`~/statscast/data`) も掃除する。** データ同期は
 パイプライン→リポジトリの `rsync --delete` ミラーのため、リポジトリ側だけ削除しても
@@ -209,7 +214,11 @@ python3 scripts/video/batch_burn.py --dry-run            # 何が処理待ちか
 nohup python3 scripts/video/batch_burn.py > ~/batch_burn.log 2>&1 &
 tail -f ~/batch_burn.log
 
-# ④ python3 scripts/video/upload_youtube.py  (手で上げるなら ~/.diamondlab/upload/{UID}_overlay.mp4 を
+# ④ python3 scripts/video/upload_youtube.py
+#    アップから 24 時間たっても YouTube の処理が始まらない動画は「途中で切れたアップロードの残骸」とみなし、
+#    使わずにアップし直す (2026-11-18。以前は 10/25 東大-法政の残骸を毎晩 90 分待ち続けていた)。
+#    残骸は自動では消さないので YouTube Studio で削除する。状態確認の通信エラーでは落ちずに次の確認で再試行
+#    (手で上げるなら ~/.diamondlab/upload/{UID}_overlay.mp4 を
 #    YouTube に「限定公開」でアップロード → 動画IDを scripts/video/youtube_ids.json に記入)
 
 # ⑤ サイトに反映

@@ -1078,19 +1078,33 @@ def check_defense_data(data_dir):
         ng("defenseData.json", f"空またはリスト形式でない (type={type(d).__name__})")
         return
     ok(f"defenseData.json: {len(d)}件パース・リスト形式 OK")
-    required = {"pitchUID", "year", "pitcher", "batted", "fielders"}
+    required = {"year", "date", "pitcher", "batter", "batted", "fielders"}
     bad = [f"#{i}" for i, r in enumerate(d[:50]) if required - set(r.keys())]
     if not bad:
-        ok("defenseData.json: 必須キー (pitchUID/year/pitcher/batted/fielders) 実在")
+        ok("defenseData.json: 必須キー (year/date/pitcher/batter/batted/fielders) 実在")
     else:
         ng("defenseData.json: 必須キー欠落", ", ".join(bad[:3]))
-    # 同じ打球が2回入っていないこと (旧ファイルは 11,377件中 4,067件が重複していた)
-    uids = [r.get("pitchUID") for r in d]
-    dup = len(uids) - len(set(uids))
-    if dup:
-        ng("defenseData.json: 同じ打球 (pitchUID) の重複", f"{dup}件")
+    # TrackMan の識別子 (PitchUID・GameUID・選手 ID) は公開しない (2026-11-18 から。画面では使っていない)
+    leaked = sorted({k for r in d for k in ("pitchUID", "gameUID") if k in r}
+                    | {f"{g}.id" for r in d for g in ("pitcher", "batter") if "id" in (r.get(g) or {})}
+                    | {"fielders.*.id" for r in d for f in (r.get("fielders") or {}).values() if "id" in (f or {})})
+    if leaked:
+        ng("defenseData.json: 公開しない識別子が入っている", ", ".join(leaked))
     else:
-        ok(f"defenseData.json: pitchUID 重複なし ({len(uids)}打球)")
+        ok("defenseData.json: PitchUID・GameUID・選手 ID なし")
+    # 同じ打球が2回入っていないこと (旧ファイルは 11,377件中 4,067件が重複していた)。
+    # UID は出さないので、試合日・回・投打者・投球と打球の値の組で見る (生成側は UID で重複を止めている)
+    def sig(r):
+        p, b = r.get("pitch") or {}, r.get("batted") or {}
+        return (r.get("date"), r.get("inning"), r.get("topBottom"), (r.get("pitcher") or {}).get("name"),
+                (r.get("batter") or {}).get("name"), p.get("speed"), p.get("plateLocSide"), p.get("plateLocHeight"),
+                b.get("exitSpeed"), b.get("angle"), b.get("distance"), b.get("direction"))
+    sigs = [sig(r) for r in d]
+    dup = len(sigs) - len(set(sigs))
+    if dup:
+        ng("defenseData.json: 同じ打球の重複", f"{dup}件")
+    else:
+        ok(f"defenseData.json: 同じ打球の重複なし ({len(sigs)}打球)")
 
 
 YOUTUBE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
