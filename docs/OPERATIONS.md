@@ -7,7 +7,7 @@ CLAUDE.md の「絶対に守ること」の**根拠と復旧手順**をリポジ
 ## 大原則
 
 - 変更は必ず `./update_and_deploy.sh` 経由。手作業での assets/ 差し替え・data/ 直編集はしない。
-- 何か変えたら必ず `python3 scripts/validate_data.py`。**基準は「FAIL 0 / WARN は既知の 2 行のみ」** (詳細は下記「検証ゲート」)。
+- 何か変えたら必ず `python3 scripts/validate_data.py`。**基準は「FAIL 0 / WARN は既知の 1 行のみ」** (詳細は下記「検証ゲート」)。
 - main への push = 本番デプロイ (GitHub Pages)。push する前に必ず fetch する。
 
 ## 落とし穴カタログ
