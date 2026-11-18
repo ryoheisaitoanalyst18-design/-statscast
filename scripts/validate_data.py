@@ -298,8 +298,9 @@ def check_result_pitches(data_dir, year_doc):
       - ev (打球速度) は打球になった球にだけ付く
 
     カウント (balls 0-3 / strikes 0-2) の域外は**元CSVに実在する**ため WARN 止まり
-    (2026-08 時点で全12万球中14球: 3-3 や 0--1。TrackMan 側の記録ミスで、
-     多くは三振行に投球後のカウントが入っている)。率が跳ねたら定義破壊なので FAIL。
+    (TrackMan 側の記録ミス。三振行に投球後のカウントが入る例: 3-3, 0--1)。
+    率が跳ねたら定義破壊なので FAIL。なお本チェックは PA/TBF 上位 10 名のみを対象とし、
+    全投球の網羅的スキャンではない。
     """
     targets = []
     for r in sorted(year_doc.get("batterLeaderboard", []), key=lambda r: -r.get("PA", 0))[:10]:
